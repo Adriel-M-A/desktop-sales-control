@@ -1,0 +1,8 @@
+{
+  "recommendations": [
+    "bradlc.vscode-tailwindcss", // Vital para Tailwind v4
+    "dbaeumer.vscode-eslint", // Para encontrar errores
+    "esbenp.prettier-vscode", // Para formatear código
+    "dsznajder.es7-react-js-snippets" // Snippets de React útiles
+  ]
+}
