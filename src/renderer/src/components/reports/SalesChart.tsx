@@ -13,9 +13,10 @@ const data = [
 
 export default function SalesChart() {
   return (
-    <Card className="col-span-4">
+    // ESTILO: Superficie blanca con borde muy sutil y sombra suave
+    <Card className="col-span-4 bg-card shadow-sm border-border/50">
       <CardHeader>
-        <CardTitle>Resumen Semanal</CardTitle>
+        <CardTitle className="text-lg font-semibold text-foreground">Resumen Semanal</CardTitle>
       </CardHeader>
       <CardContent className="pl-2">
         <div className="h-[350px] w-full">
@@ -27,6 +28,7 @@ export default function SalesChart() {
                 fontSize={12}
                 tickLine={false}
                 axisLine={false}
+                className="text-muted-foreground"
               />
               <YAxis
                 stroke="#888888"
@@ -34,15 +36,22 @@ export default function SalesChart() {
                 tickLine={false}
                 axisLine={false}
                 tickFormatter={(value) => `$${value}`}
+                className="text-muted-foreground"
               />
               <Tooltip
                 cursor={{ fill: 'transparent' }}
-                contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                contentStyle={{
+                  backgroundColor: 'hsl(var(--card))',
+                  borderRadius: '8px',
+                  border: '1px solid hsl(var(--border))',
+                  boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+                }}
+                labelStyle={{ color: 'hsl(var(--muted-foreground))' }}
+                itemStyle={{ color: 'hsl(var(--foreground))', fontWeight: 'bold' }}
               />
-              {/* Usamos 'fill' con una clase de color primario o un hex directo */}
               <Bar
                 dataKey="total"
-                fill="currentColor"
+                fill="hsl(var(--primary))"
                 radius={[4, 4, 0, 0]}
                 className="fill-primary"
               />

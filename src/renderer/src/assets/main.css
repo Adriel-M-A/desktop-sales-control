@@ -3,9 +3,7 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* CONFIGURACIÓN DE TEMA (Tailwind v4)
-  Aquí conectamos las variables CSS con las clases de Tailwind.
-*/
+/* CONFIGURACIÓN DE TEMA (Tailwind v4) */
 @theme {
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
@@ -35,7 +33,6 @@
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
 
-  /* NUEVO: Definimos colores específicos para el Sidebar */
   --color-sidebar: hsl(var(--sidebar));
   --color-sidebar-foreground: hsl(var(--sidebar-foreground));
   --color-sidebar-accent: hsl(var(--sidebar-accent));
@@ -46,49 +43,84 @@
   --radius-sm: calc(var(--radius) - 4px);
 }
 
-/* TUS 5 COLORES MAESTROS
-  Edita los valores HSL aquí y cambiarán en toda la app automáticamente.
+/* PALETA DE COLORES MAESTRA - TEMA "PRO SALES"
+   Basado en la estrategia de 5 colores.
 */
 :root {
-  /* 1. COLOR DE FONDO GENERAL (App Background) */
-  --background: 0 0% 98%; /* Blanco humo */
-  --foreground: 240 10% 3.9%; /* Texto casi negro */
+  /* COLOR 1: EL LIENZO (Fondo suave, no blanco puro para descansar la vista) */
+  --background: 210 40% 98%; /* Slate-50 */
+  --foreground: 222 47% 11%; /* Texto principal: Azul muy oscuro, casi negro */
 
-  /* 2. COLOR DE SUPERFICIE (Tarjetas, Modales, Inputs) */
-  --card: 0 0% 100%; /* Blanco puro */
-  --card-foreground: 240 10% 3.9%;
+  /* COLOR 2: LA SUPERFICIE (Donde vive el contenido: Productos, Carrito) */
+  --card: 0 0% 100%; /* Blanco puro para máximo contraste con el contenido */
+  --card-foreground: 222 47% 11%;
   --popover: 0 0% 100%;
-  --popover-foreground: 240 10% 3.9%;
+  --popover-foreground: 222 47% 11%;
 
-  /* 3. COLOR PRINCIPAL (Botones, Links, Focus) - Tu "Color de Marca" */
-  --primary: 240 5.9% 10%; /* Negro intenso (Ejemplo) */
-  --primary-foreground: 0 0% 98%; /* Texto sobre el botón */
+  /* COLOR 3: EL ACENTO (Botones, Precios, Acciones) -> Azul Royal Vibrante */
+  --primary: 221 83% 53%; /* Blue-600: Vibrante y confiable */
+  --primary-foreground: 210 40% 98%; /* Texto blanco sobre azul */
 
-  /* 4. COLOR DE BORDES Y SEPARADORES */
-  --border: 240 5.9% 90%; /* Gris muy suave */
-  --input: 240 5.9% 90%;
-  --ring: 240 5.9% 10%; /* Color del anillo de foco */
+  /* COLOR 4: LA ESTRUCTURA (Sidebar Oscuro para jerarquía) */
+  --sidebar: 222 47% 11%; /* Slate-900: Muy oscuro, elegante */
+  --sidebar-foreground: 210 40% 98%; /* Texto claro en sidebar */
+  --sidebar-accent: 217 33% 17%; /* Hover en sidebar (un poco más claro) */
+  --sidebar-accent-foreground: 210 40% 98%;
 
-  /* 5. COLOR DEL SIDEBAR (Personalizado) */
-  --sidebar: 240 5.9% 10%; /* Fondo oscuro para el sidebar */
-  --sidebar-foreground: 240 4.8% 95.9%; /* Texto claro */
-  --sidebar-accent: 240 3.7% 15.9%; /* Fondo al pasar el mouse */
-  --sidebar-accent-foreground: 240 4.8% 95.9%;
+  /* COLOR 5: EL DETALLE (Bordes y Elementos Secundarios) */
+  --muted: 210 40% 96.1%; /* Fondo gris muy suave para items alternos/hovers */
+  --muted-foreground: 215 16% 47%; /* Texto secundario (gris medio) */
 
-  /* Otros colores auxiliares (Secundarios, Muted, Error) */
-  --secondary: 240 4.8% 95.9%;
-  --secondary-foreground: 240 5.9% 10%;
+  --border: 220 13% 95%; /* Bordes sutiles */
+  --input: 214 32% 91%;
+  --ring: 221 83% 53%; /* Anillo de foco igual al primario */
 
-  --muted: 240 4.8% 95.9%;
-  --muted-foreground: 240 3.8% 46.1%;
+  /* Colores Auxiliares */
+  --secondary: 210 40% 96.1%; /* Botones secundarios (gris claro) */
+  --secondary-foreground: 222 47% 11%;
 
-  --accent: 240 4.8% 95.9%;
-  --accent-foreground: 240 5.9% 10%;
+  --accent: 210 40% 96.1%; /* Similar a secondary, para listas */
+  --accent-foreground: 222 47% 11%;
 
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 0 0% 98%;
+  --destructive: 0 84% 60%; /* Rojo suave pero alerta para Cancelar/Borrar */
+  --destructive-foreground: 210 40% 98%;
 
-  --radius: 0.5rem;
+  --radius: 0.5rem; /* Bordes redondeados modernos (8px) */
+}
+
+/* Modo Oscuro (Opcional, pero configurado por si acaso) */
+.dark {
+  --background: 222 47% 11%;
+  --foreground: 210 40% 98%;
+
+  --card: 222 47% 11%;
+  --card-foreground: 210 40% 98%;
+  --popover: 222 47% 11%;
+  --popover-foreground: 210 40% 98%;
+
+  --primary: 217 91% 60%;
+  --primary-foreground: 222 47% 11%;
+
+  --secondary: 217 33% 17%;
+  --secondary-foreground: 210 40% 98%;
+
+  --muted: 217 33% 17%;
+  --muted-foreground: 215 20% 65%;
+
+  --accent: 217 33% 17%;
+  --accent-foreground: 210 40% 98%;
+
+  --destructive: 0 63% 31%;
+  --destructive-foreground: 210 40% 98%;
+
+  --border: 217 33% 17%;
+  --input: 217 33% 17%;
+  --ring: 224 76% 48%;
+
+  --sidebar: 222 47% 11%;
+  --sidebar-foreground: 210 40% 98%;
+  --sidebar-accent: 217 33% 17%;
+  --sidebar-accent-foreground: 210 40% 98%;
 }
 
 body {
@@ -101,9 +133,9 @@ body {
   html,
   body,
   #root {
-    height: 100vh; /* Altura total de la ventana */
+    height: 100vh;
     width: 100vw;
-    overflow: hidden; /* Evita el scroll nativo de la ventana, usamos el nuestro */
+    overflow: hidden;
     margin: 0;
     padding: 0;
   }

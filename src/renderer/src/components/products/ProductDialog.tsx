@@ -49,109 +49,123 @@ export default function ProductDialog({ open, onOpenChange, onSubmit }: ProductD
     }
   })
 
-  // Reiniciar formulario al abrir
   useEffect(() => {
     if (open) {
       form.reset({ code: '', name: '', price: 0 })
     }
   }, [open, form])
 
-  // Acción 1: Guardar y Cerrar (Comportamiento estándar)
   const handleSaveAndClose = (values: ProductFormValues) => {
     onSubmit(values)
     onOpenChange(false)
   }
 
-  // Acción 2: Guardar y Continuar (Nuevo comportamiento)
   const handleSaveAndContinue = (values: ProductFormValues) => {
     onSubmit(values)
-
-    // Reseteamos el formulario a valores vacíos para el siguiente
     form.reset({
       code: '',
       name: '',
       price: 0
     })
-
-    // Opcional: Podrías hacer focus manual al primer input si fuera necesario,
-    // pero React Hook Form suele manejar bien el ciclo de vida.
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      {/* SUPERFICIE BLANCA (bg-card) flotando sobre el overlay oscuro */}
+      <DialogContent className="sm:max-w-[500px] bg-card border-border shadow-2xl">
         <DialogHeader>
-          <DialogTitle>Nuevo Producto</DialogTitle>
-          <DialogDescription>Complete los datos del producto.</DialogDescription>
+          <DialogTitle className="text-xl font-bold text-foreground">Nuevo Producto</DialogTitle>
+          <DialogDescription className="text-muted-foreground">
+            Complete los datos del producto.
+          </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
-          {/* Usamos preventDefault en el form para manejar los botones manualmente */}
           <form className="space-y-4 py-4">
-            {/* Código */}
             <FormField
               control={form.control}
               name="code"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Código / SKU</FormLabel>
+                  <FormLabel className="text-foreground font-medium">Código / SKU</FormLabel>
                   <FormControl>
-                    {/* autoFocus ayuda a iniciar escribiendo rápido */}
-                    <Input placeholder="Ej. 7791234..." {...field} autoFocus />
+                    {/* INPUT: Fondo 'background' (Gris suave) para contrastar con el modal blanco */}
+                    <Input
+                      placeholder="Ej. 7791234..."
+                      {...field}
+                      autoFocus
+                      className="bg-background border-input focus:border-primary focus-visible:ring-primary"
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
 
-            {/* Nombre */}
             <FormField
               control={form.control}
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Nombre</FormLabel>
+                  <FormLabel className="text-foreground font-medium">Nombre</FormLabel>
                   <FormControl>
-                    <Input placeholder="Descripción del producto" {...field} />
+                    <Input
+                      placeholder="Descripción del producto"
+                      {...field}
+                      className="bg-background border-input focus:border-primary focus-visible:ring-primary"
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
 
-            {/* Precio */}
             <FormField
               control={form.control}
               name="price"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Precio ($)</FormLabel>
+                  <FormLabel className="text-foreground font-medium">Precio ($)</FormLabel>
                   <FormControl>
-                    <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      {...field}
+                      className="bg-background border-input font-mono font-medium focus:border-primary focus-visible:ring-primary"
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
 
-            <DialogFooter className="gap-2 sm:gap-0">
-              {/* Botón Cancelar */}
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <DialogFooter className="gap-2 sm:gap-0 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                className="border-input hover:bg-muted text-foreground"
+              >
                 Cancelar
               </Button>
 
-              {/* Botón Guardar y Seguir (Secundario) */}
+              {/* Botón secundario con el texto original restaurado */}
               <Button
                 type="button"
                 variant="secondary"
                 onClick={form.handleSubmit(handleSaveAndContinue)}
+                className="bg-secondary text-secondary-foreground hover:bg-secondary/80"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Guardar y crear otro
               </Button>
 
-              {/* Botón Guardar y Cerrar (Principal) */}
-              <Button type="submit" onClick={form.handleSubmit(handleSaveAndClose)}>
+              <Button
+                type="submit"
+                onClick={form.handleSubmit(handleSaveAndClose)}
+                className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-md"
+              >
                 <Save className="h-4 w-4 mr-2" />
                 Guardar
               </Button>

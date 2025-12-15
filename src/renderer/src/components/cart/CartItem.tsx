@@ -21,8 +21,9 @@ export default function CartItem({
   const total = price * quantity
 
   return (
-    <div className="group grid grid-cols-[1fr_auto_auto] items-center gap-3 rounded-xl border border-border/60 bg-card p-3 shadow-sm transition-all hover:border-primary/20 hover:shadow-md">
-      {/* COLUMNA 1: Información del Producto */}
+    // TARJETA BLANCA: bg-card, borde sutil.
+    <div className="group grid grid-cols-[1fr_auto_auto] items-center gap-3 rounded-xl border border-border bg-card p-3 shadow-sm transition-all hover:border-primary/30">
+      {/* Info */}
       <div className="flex flex-col gap-1 overflow-hidden">
         <span className="truncate text-sm font-semibold text-foreground leading-tight" title={name}>
           {name}
@@ -35,12 +36,12 @@ export default function CartItem({
         </div>
       </div>
 
-      {/* COLUMNA 2: Contador "Pastilla" */}
+      {/* Contador: Fondo gris muy suave (bg-muted) para contener los botones */}
       <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5 h-8">
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7 rounded-md text-foreground hover:bg-background hover:shadow-sm"
+          className="h-7 w-7 rounded-md text-foreground hover:bg-white hover:text-primary hover:shadow-sm transition-all"
           onClick={onDecrease}
         >
           <Minus className="h-3 w-3" />
@@ -53,14 +54,14 @@ export default function CartItem({
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7 rounded-md text-foreground hover:bg-background hover:shadow-sm"
+          className="h-7 w-7 rounded-md text-foreground hover:bg-white hover:text-primary hover:shadow-sm transition-all"
           onClick={onIncrease}
         >
           <Plus className="h-3 w-3" />
         </Button>
       </div>
 
-      {/* COLUMNA 3: Eliminar */}
+      {/* Eliminar: Rojo sutil al hover */}
       <div className="flex items-center">
         <Button
           variant="ghost"

@@ -9,7 +9,7 @@ export default function ProductFilter() {
       <Input
         type="text"
         placeholder="Buscar producto por nombre, código..."
-        className="h-12 pl-12 text-base bg-card shadow-sm border-muted-foreground/20 focus-visible:ring-primary/20"
+        className="h-12 pl-12 text-base bg-card border-border shadow-sm placeholder:text-muted-foreground/70 focus-visible:ring-primary/30 focus-visible:border-primary"
       />
     </div>
   )
