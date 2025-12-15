@@ -97,6 +97,18 @@ body {
   border-color: var(--border);
 }
 
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100vh; /* Altura total de la ventana */
+    width: 100vw;
+    overflow: hidden; /* Evita el scroll nativo de la ventana, usamos el nuestro */
+    margin: 0;
+    padding: 0;
+  }
+}
+
 .drag-region {
   -webkit-app-region: drag;
 }
