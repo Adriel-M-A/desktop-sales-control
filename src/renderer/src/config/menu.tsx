@@ -1,10 +1,10 @@
-import { LayoutDashboard, Settings } from 'lucide-react'
+import { ShoppingCart, Settings } from 'lucide-react'
 
 export const menuConfig = [
   {
-    title: 'Dashboard',
-    icon: LayoutDashboard,
-    href: '/'
+    title: 'Puntos de venta',
+    icon: ShoppingCart,
+    href: '/points-of-sale'
   },
   {
     title: 'Configuración',
