@@ -1,5 +1,5 @@
 import { Sidebar } from './Sidebar'
-import { TitleBar } from './TitleBar'
+import TitleBar from './TitleBar'
 import { Outlet } from 'react-router-dom'
 import { Toaster } from '@/components/ui/sonner'
 
