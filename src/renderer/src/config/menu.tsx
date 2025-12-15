@@ -1,4 +1,4 @@
-import { ShoppingCart, Package, Settings } from 'lucide-react'
+import { ShoppingCart, Package, ChartAreaIcon, Settings } from 'lucide-react'
 import { title } from 'process'
 
 export const menuConfig = [
@@ -8,6 +8,7 @@ export const menuConfig = [
     href: '/points-of-sale'
   },
   { title: 'Productos', icon: Package, href: '/products' },
+  { title: 'Reportes', icon: ChartAreaIcon, href: '/reports' },
   {
     title: 'Configuración',
     icon: Settings,

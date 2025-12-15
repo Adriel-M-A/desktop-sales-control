@@ -2,6 +2,7 @@ import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import AppLayout from './components/layout/AppLayout'
 import Sales from './components/pages/Sales'
 import Products from './components/pages/Products'
+import Reports from './components/pages/Reports'
 
 function App() {
   return (
@@ -10,9 +11,9 @@ function App() {
         <Route element={<AppLayout />}>
           {/* Redirección por defecto a ventas */}
           <Route path="/" element={<Navigate to="/points-of-sale" replace />} />
-
           <Route path="/points-of-sale" element={<Sales />} />
           <Route path="/products" element={<Products />} />
+          <Route path="/reports" element={<Reports />} />
 
           <Route path="*" element={<div className="p-10">Página no encontrada</div>} />
         </Route>
