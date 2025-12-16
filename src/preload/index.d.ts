@@ -4,18 +4,16 @@ declare global {
   interface Window {
     electron: ElectronAPI
     api: {
-      // Productos
-      getProducts: (search?: string) => Promise<any[]>
+      getProducts: (search?: string, includeInactive?: boolean) => Promise<any[]>
       createProduct: (product: { code: string; name: string; price: number }) => Promise<any>
       updateProduct: (id: number, data: { name: string; price: number }) => Promise<any>
       deleteProduct: (id: number) => Promise<any>
+      toggleProductStatus: (id: number, isActive: boolean) => Promise<any>
 
-      // Ventas
       createSale: (sale: { paymentMethod: string; total: number; items: any[] }) => Promise<any>
       getSales: (limit?: number, offset?: number) => Promise<any[]>
       cancelSale: (id: number) => Promise<any>
 
-      // Reportes
       getDashboardStats: () => Promise<{
         totalIncome: number
         totalSales: number

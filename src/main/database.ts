@@ -1,22 +1,16 @@
 import Database from 'better-sqlite3'
 import { app } from 'electron'
 import { join } from 'path'
-import { is } from '@electron-toolkit/utils' // <--- 1. Importamos esto
+import { is } from '@electron-toolkit/utils'
 
-// 2. Lógica Condicional de Ruta
-// En DEV: Se guarda en la raíz de tu proyecto (donde está package.json)
-// En PROD: Se guarda en la carpeta segura de usuario (AppData/Library)
 const dbPath = is.dev
   ? join(process.cwd(), 'sales-system.db')
   : join(app.getPath('userData'), 'sales-system.db')
 
 const db = new Database(dbPath)
-
-// Habilitar modo WAL para mejor rendimiento
 db.pragma('journal_mode = WAL')
 
 export function initDB(): void {
-  // 1. TABLA PRODUCTOS
   db.exec(`
     CREATE TABLE IF NOT EXISTS products (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -28,7 +22,6 @@ export function initDB(): void {
     );
   `)
 
-  // 2. TABLA VENTAS
   db.exec(`
     CREATE TABLE IF NOT EXISTS sales (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,7 +32,6 @@ export function initDB(): void {
     );
   `)
 
-  // 3. TABLA ITEMS DE VENTA
   db.exec(`
     CREATE TABLE IF NOT EXISTS sale_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,19 +45,29 @@ export function initDB(): void {
       FOREIGN KEY (product_id) REFERENCES products(id)
     );
   `)
-
-  // Log útil para saber dónde está tu DB en este momento
-  console.log('📦 Base de datos conectada en:', dbPath)
 }
 
-// --- API DE PRODUCTOS ---
+export const getProducts = (search = '', includeInactive = false) => {
+  let query = 'SELECT * FROM products'
+  const conditions: string[] = []
+  const params: any = {}
 
-export const getProducts = (search = '') => {
-  const query = search
-    ? `SELECT * FROM products WHERE (name LIKE @s OR code LIKE @s) AND is_active = 1 ORDER BY created_at DESC`
-    : `SELECT * FROM products WHERE is_active = 1 ORDER BY created_at DESC`
+  if (search) {
+    conditions.push('(name LIKE @s OR code LIKE @s)')
+    params.s = `%${search}%`
+  }
 
-  return db.prepare(query).all(search ? { s: `%${search}%` } : {})
+  if (!includeInactive) {
+    conditions.push('is_active = 1')
+  }
+
+  if (conditions.length > 0) {
+    query += ' WHERE ' + conditions.join(' AND ')
+  }
+
+  query += ' ORDER BY created_at DESC'
+
+  return db.prepare(query).all(params)
 }
 
 export const createProduct = (product: { code: string; name: string; price: number }) => {
@@ -82,11 +84,13 @@ export const deleteProduct = (id: number) => {
   return db.prepare(`UPDATE products SET is_active = 0 WHERE id = ?`).run(id)
 }
 
-// --- API DE VENTAS ---
+export const toggleProductStatus = (id: number, isActive: boolean) => {
+  const status = isActive ? 1 : 0
+  return db.prepare(`UPDATE products SET is_active = @status WHERE id = @id`).run({ status, id })
+}
 
 export const createSale = (sale: { paymentMethod: string; items: any[]; total: number }) => {
   const createTransaction = db.transaction(() => {
-    // 1. Insertar Venta
     const result = db
       .prepare(
         `
@@ -97,7 +101,6 @@ export const createSale = (sale: { paymentMethod: string; items: any[]; total: n
 
     const saleId = result.lastInsertRowid
 
-    // 2. Insertar Items
     const insertItem = db.prepare(`
       INSERT INTO sale_items (sale_id, product_id, product_name, quantity, unit_price, subtotal)
       VALUES (@saleId, @productId, @name, @qty, @price, @subtotal)
@@ -140,8 +143,6 @@ export const getSales = (limit = 50, offset = 0) => {
 export const cancelSale = (id: number) => {
   return db.prepare(`UPDATE sales SET status = 'cancelled' WHERE id = ?`).run(id)
 }
-
-// --- API DE REPORTES ---
 
 export const getDashboardStats = () => {
   const income = db

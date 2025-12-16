@@ -14,7 +14,8 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      contextIsolation: true
     }
   })
 
@@ -30,34 +31,27 @@ function createWindow(): void {
 
   db.initDB()
 
-  ipcMain.handle('db:get-products', (_, search) => db.getProducts(search))
-  ipcMain.handle('db:create-product', (_, product) => db.createProduct(product))
-  ipcMain.handle('db:update-product', (_, { id, ...data }) => db.updateProduct(id, data))
+  ipcMain.handle('db:get-products', (_, params) =>
+    db.getProducts(params?.search, params?.includeInactive)
+  )
+  ipcMain.handle('db:create-product', (_, p) => db.createProduct(p))
+  ipcMain.handle('db:update-product', (_, p) => db.updateProduct(p.id, p))
   ipcMain.handle('db:delete-product', (_, id) => db.deleteProduct(id))
+  ipcMain.handle('db:toggle-product-status', (_, p) => db.toggleProductStatus(p.id, p.isActive))
 
-  ipcMain.handle('db:create-sale', (_, sale) => db.createSale(sale))
-  ipcMain.handle('db:get-sales', (_, { limit, offset }) => db.getSales(limit, offset))
+  ipcMain.handle('db:create-sale', (_, s) => db.createSale(s))
+  ipcMain.handle('db:get-sales', (_, p) => db.getSales(p.limit, p.offset))
   ipcMain.handle('db:cancel-sale', (_, id) => db.cancelSale(id))
 
   ipcMain.handle('db:get-stats', () => db.getDashboardStats())
   ipcMain.handle('db:get-top-products', () => db.getTopProducts())
   ipcMain.handle('db:get-sales-chart', () => db.getSalesChart())
 
-  ipcMain.on('window-minimize', () => {
-    mainWindow.minimize()
-  })
-
+  ipcMain.on('window-minimize', () => mainWindow.minimize())
   ipcMain.on('window-maximize', () => {
-    if (mainWindow.isMaximized()) {
-      mainWindow.unmaximize()
-    } else {
-      mainWindow.maximize()
-    }
+    mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize()
   })
-
-  ipcMain.on('window-close', () => {
-    mainWindow.close()
-  })
+  ipcMain.on('window-close', () => mainWindow.close())
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
