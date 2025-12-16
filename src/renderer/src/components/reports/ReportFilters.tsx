@@ -4,31 +4,73 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
-export type FilterType = 'today' | 'yesterday' | 'week' | 'fortnight' | 'month' | 'custom'
+export type FilterType = 'today' | 'yesterday' | 'week' | 'month' | 'custom'
 
-// ... (FILTER_LABELS se mantiene igual, omitido por brevedad)
+interface ReportFiltersProps {
+  onFilterChange: (range: { startDate: string; endDate: string }) => void
+}
 
-export default function ReportFilters() {
+// Función auxiliar robusta para formatear fecha a YYYY-MM-DD
+// Evita problemas de zona horaria y localización
+const formatDate = (date: Date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+export default function ReportFilters({ onFilterChange }: ReportFiltersProps) {
   const [activeFilter, setActiveFilter] = useState<FilterType>('today')
-  const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' })
 
-  // ... (useEffect y helpers se mantienen igual) ...
+  // Usamos la función segura para inicializar
+  const todayStr = formatDate(new Date())
+  const [dateRange, setDateRange] = useState({ start: todayStr, end: todayStr })
+
   useEffect(() => {
-    // ... lógica de fechas existente ...
     const today = new Date()
     let start = new Date()
     let end = new Date()
-    // (Simulación de lógica para no repetir todo el bloque de código previo)
-    setDateRange({ start: '2025-12-15', end: '2025-12-15' })
+
+    switch (activeFilter) {
+      case 'today':
+        // Start y End son hoy
+        break
+      case 'yesterday':
+        start.setDate(today.getDate() - 1)
+        end.setDate(today.getDate() - 1)
+        break
+      case 'week':
+        // Últimos 7 días
+        start.setDate(today.getDate() - 6)
+        break
+      case 'month':
+        // Primer día del mes actual
+        start = new Date(today.getFullYear(), today.getMonth(), 1)
+        break
+      case 'custom':
+        // No modificamos automáticamente
+        return
+    }
+
+    const newRange = { start: formatDate(start), end: formatDate(end) }
+    setDateRange(newRange)
+
+    // Notificamos al padre
+    onFilterChange({ startDate: newRange.start, endDate: newRange.end })
   }, [activeFilter])
 
-  const formatDateDisplay = (dateString: string) => dateString // Placeholder
+  const handleCustomDateChange = (type: 'start' | 'end', value: string) => {
+    const newRange = { ...dateRange, [type]: value }
+    setDateRange(newRange)
+
+    if (activeFilter === 'custom') {
+      onFilterChange({ startDate: newRange.start, endDate: newRange.end })
+    }
+  }
 
   return (
     <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4 w-full">
-      {/* Grupo de Botones */}
       <div className="flex flex-wrap items-center gap-2">
-        {/* Los botones usan variant "default" (Azul Primary) o "outline" (Blanco) */}
         <FilterButton
           label="Hoy"
           isActive={activeFilter === 'today'}
@@ -40,75 +82,46 @@ export default function ReportFilters() {
           onClick={() => setActiveFilter('yesterday')}
         />
         <FilterButton
-          label="Semana"
+          label="Últimos 7 días"
           isActive={activeFilter === 'week'}
           onClick={() => setActiveFilter('week')}
         />
         <FilterButton
-          label="Quincena"
-          isActive={activeFilter === 'fortnight'}
-          onClick={() => setActiveFilter('fortnight')}
-        />
-        <FilterButton
-          label="Mes"
+          label="Este Mes"
           isActive={activeFilter === 'month'}
           onClick={() => setActiveFilter('month')}
         />
         <FilterButton
-          label="Rango"
+          label="Personalizado"
           isActive={activeFilter === 'custom'}
           onClick={() => setActiveFilter('custom')}
         />
       </div>
 
-      {/* Visualización de Fechas */}
       <div className="flex items-center gap-3 ml-auto bg-muted/40 p-1.5 rounded-lg border border-border/50 animate-in fade-in slide-in-from-right-4">
         <div className="h-8 w-8 rounded-md bg-card flex items-center justify-center border shadow-sm">
           <CalendarIcon className="h-4 w-4 text-muted-foreground" />
         </div>
 
-        {activeFilter === 'custom' ? (
-          <div className="flex items-center gap-2">
-            {/* INPUTS: bg-card (Blanco) para resaltar sobre el fondo gris del contenedor */}
-            <Input
-              type="date"
-              value={dateRange.start}
-              onChange={(e) => setDateRange((prev) => ({ ...prev, start: e.target.value }))}
-              className="h-8 w-32 text-xs bg-card border-input focus:border-primary shadow-sm"
-            />
-            <span className="text-muted-foreground text-xs">
-              <ArrowRight className="h-3 w-3" />
-            </span>
-            <Input
-              type="date"
-              value={dateRange.end}
-              onChange={(e) => setDateRange((prev) => ({ ...prev, end: e.target.value }))}
-              className="h-8 w-32 text-xs bg-card border-input focus:border-primary shadow-sm"
-            />
-          </div>
-        ) : (
-          <div className="flex items-center gap-3 px-2">
-            <div className="flex flex-col items-start">
-              <span className="text-[10px] uppercase text-muted-foreground font-bold tracking-wider">
-                Desde
-              </span>
-              <span className="text-sm font-medium tabular-nums text-foreground">
-                {formatDateDisplay(dateRange.start)}
-              </span>
-            </div>
-
-            <div className="h-6 w-px bg-border mx-1" />
-
-            <div className="flex flex-col items-start">
-              <span className="text-[10px] uppercase text-muted-foreground font-bold tracking-wider">
-                Hasta
-              </span>
-              <span className="text-sm font-medium tabular-nums text-foreground">
-                {formatDateDisplay(dateRange.end)}
-              </span>
-            </div>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <Input
+            type="date"
+            value={dateRange.start}
+            onChange={(e) => handleCustomDateChange('start', e.target.value)}
+            disabled={activeFilter !== 'custom'}
+            className="h-8 w-32 text-xs bg-card border-input focus:border-primary shadow-sm"
+          />
+          <span className="text-muted-foreground text-xs">
+            <ArrowRight className="h-3 w-3" />
+          </span>
+          <Input
+            type="date"
+            value={dateRange.end}
+            onChange={(e) => handleCustomDateChange('end', e.target.value)}
+            disabled={activeFilter !== 'custom'}
+            className="h-8 w-32 text-xs bg-card border-input focus:border-primary shadow-sm"
+          />
+        </div>
       </div>
     </div>
   )

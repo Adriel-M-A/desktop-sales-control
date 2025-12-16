@@ -11,18 +11,27 @@ declare global {
       toggleProductStatus: (id: number, isActive: boolean) => Promise<any>
 
       createSale: (sale: { paymentMethod: string; total: number; items: any[] }) => Promise<any>
-      getSales: (limit?: number, offset?: number) => Promise<any[]>
-      cancelSale: (id: number) => Promise<any>
 
-      getDashboardStats: () => Promise<{
+      getSales: (params: {
+        limit?: number
+        offset?: number
+        startDate?: string
+        endDate?: string
+      }) => Promise<any[]>
+
+      cancelSale: (id: number) => Promise<any>
+      // NUEVO: Definición de tipo
+      restoreSale: (id: number) => Promise<any>
+
+      getDashboardStats: (range: { startDate: string; endDate: string }) => Promise<{
         totalIncome: number
         totalSales: number
         averageTicket: number
         cancelledCount: number
         cancelledAmount: number
       }>
-      getTopProducts: () => Promise<any[]>
-      getSalesChart: () => Promise<any[]>
+      getTopProducts: (range: { startDate: string; endDate: string }) => Promise<any[]>
+      getSalesChart: (range: { startDate: string; endDate: string }) => Promise<any[]>
     }
   }
 }

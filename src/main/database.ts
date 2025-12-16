@@ -123,14 +123,19 @@ export const createSale = (sale: { paymentMethod: string; items: any[]; total: n
   return createTransaction()
 }
 
-export const getSales = (limit = 50, offset = 0) => {
-  const sales = db
-    .prepare(
-      `
-    SELECT * FROM sales ORDER BY created_at DESC LIMIT @limit OFFSET @offset
-  `
-    )
-    .all({ limit, offset })
+export const getSales = (limit = 50, offset = 0, startDate?: string, endDate?: string) => {
+  let query = 'SELECT * FROM sales'
+  const params: any = { limit, offset }
+
+  if (startDate && endDate) {
+    query += ' WHERE created_at >= @start AND created_at <= @end'
+    params.start = `${startDate} 00:00:00`
+    params.end = `${endDate} 23:59:59`
+  }
+
+  query += ' ORDER BY created_at DESC LIMIT @limit OFFSET @offset'
+
+  const sales = db.prepare(query).all(params)
 
   const salesWithItems = sales.map((sale: any) => {
     const items = db.prepare(`SELECT * FROM sale_items WHERE sale_id = ?`).all(sale.id)
@@ -144,18 +149,30 @@ export const cancelSale = (id: number) => {
   return db.prepare(`UPDATE sales SET status = 'cancelled' WHERE id = ?`).run(id)
 }
 
-export const getDashboardStats = () => {
+// NUEVA FUNCIÓN: Restaurar venta
+export const restoreSale = (id: number) => {
+  return db.prepare(`UPDATE sales SET status = 'completed' WHERE id = ?`).run(id)
+}
+
+export const getDashboardStats = (startDate: string, endDate: string) => {
+  const start = `${startDate} 00:00:00`
+  const end = `${endDate} 23:59:59`
+  const queryBase = `FROM sales WHERE created_at >= @start AND created_at <= @end`
+
   const income = db
-    .prepare(`SELECT SUM(total_amount) as total FROM sales WHERE status = 'completed'`)
-    .get() as any
+    .prepare(`SELECT SUM(total_amount) as total ${queryBase} AND status = 'completed'`)
+    .get({ start, end }) as any
+
   const count = db
-    .prepare(`SELECT COUNT(*) as total FROM sales WHERE status = 'completed'`)
-    .get() as any
+    .prepare(`SELECT COUNT(*) as total ${queryBase} AND status = 'completed'`)
+    .get({ start, end }) as any
+
   const cancelled = db
     .prepare(
-      `SELECT COUNT(*) as count, SUM(total_amount) as amount FROM sales WHERE status = 'cancelled'`
+      `SELECT COUNT(*) as count, SUM(total_amount) as amount ${queryBase} AND status = 'cancelled'`
     )
-    .get() as any
+    .get({ start, end }) as any
+
   const average = count.total > 0 ? income.total / count.total : 0
 
   return {
@@ -167,7 +184,10 @@ export const getDashboardStats = () => {
   }
 }
 
-export const getTopProducts = () => {
+export const getTopProducts = (startDate: string, endDate: string) => {
+  const start = `${startDate} 00:00:00`
+  const end = `${endDate} 23:59:59`
+
   return db
     .prepare(
       `
@@ -175,24 +195,29 @@ export const getTopProducts = () => {
     FROM sale_items
     JOIN sales ON sales.id = sale_items.sale_id
     WHERE sales.status = 'completed'
+    AND sales.created_at >= @start AND sales.created_at <= @end
     GROUP BY product_id
     ORDER BY sold DESC
-    LIMIT 5
+    LIMIT 10
   `
     )
-    .all()
+    .all({ start, end })
 }
 
-export const getSalesChart = () => {
+export const getSalesChart = (startDate: string, endDate: string) => {
+  const start = `${startDate} 00:00:00`
+  const end = `${endDate} 23:59:59`
+
   return db
     .prepare(
       `
     SELECT strftime('%Y-%m-%d', created_at) as date, SUM(total_amount) as total
     FROM sales
-    WHERE status = 'completed' AND created_at >= date('now', '-6 days')
+    WHERE status = 'completed'
+    AND created_at >= @start AND created_at <= @end
     GROUP BY date
     ORDER BY date ASC
   `
     )
-    .all()
+    .all({ start, end })
 }

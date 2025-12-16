@@ -14,13 +14,21 @@ const api = {
 
   // --- VENTAS ---
   createSale: (sale: any) => ipcRenderer.invoke('db:create-sale', sale),
-  getSales: (limit = 50, offset = 0) => ipcRenderer.invoke('db:get-sales', { limit, offset }),
-  cancelSale: (id: number) => ipcRenderer.invoke('db:cancel-sale', id),
 
-  // --- REPORTES (ASEGÚRATE DE QUE ESTO ESTÉ AQUÍ) ---
-  getDashboardStats: () => ipcRenderer.invoke('db:get-stats'),
-  getTopProducts: () => ipcRenderer.invoke('db:get-top-products'),
-  getSalesChart: () => ipcRenderer.invoke('db:get-sales-chart')
+  getSales: (params: { limit?: number; offset?: number; startDate?: string; endDate?: string }) =>
+    ipcRenderer.invoke('db:get-sales', params),
+
+  cancelSale: (id: number) => ipcRenderer.invoke('db:cancel-sale', id),
+  // NUEVO: Función para restaurar
+  restoreSale: (id: number) => ipcRenderer.invoke('db:restore-sale', id),
+
+  // --- REPORTES ---
+  getDashboardStats: (range: { startDate: string; endDate: string }) =>
+    ipcRenderer.invoke('db:get-stats', range),
+  getTopProducts: (range: { startDate: string; endDate: string }) =>
+    ipcRenderer.invoke('db:get-top-products', range),
+  getSalesChart: (range: { startDate: string; endDate: string }) =>
+    ipcRenderer.invoke('db:get-sales-chart', range)
 }
 
 if (process.contextIsolated) {

@@ -40,12 +40,22 @@ function createWindow(): void {
   ipcMain.handle('db:toggle-product-status', (_, p) => db.toggleProductStatus(p.id, p.isActive))
 
   ipcMain.handle('db:create-sale', (_, s) => db.createSale(s))
-  ipcMain.handle('db:get-sales', (_, p) => db.getSales(p.limit, p.offset))
-  ipcMain.handle('db:cancel-sale', (_, id) => db.cancelSale(id))
 
-  ipcMain.handle('db:get-stats', () => db.getDashboardStats())
-  ipcMain.handle('db:get-top-products', () => db.getTopProducts())
-  ipcMain.handle('db:get-sales-chart', () => db.getSalesChart())
+  ipcMain.handle('db:get-sales', (_, p) => db.getSales(p.limit, p.offset, p.startDate, p.endDate))
+
+  ipcMain.handle('db:cancel-sale', (_, id) => db.cancelSale(id))
+  // NUEVO: Handler para restaurar venta
+  ipcMain.handle('db:restore-sale', (_, id) => db.restoreSale(id))
+
+  ipcMain.handle('db:get-stats', (_, params) =>
+    db.getDashboardStats(params.startDate, params.endDate)
+  )
+  ipcMain.handle('db:get-top-products', (_, params) =>
+    db.getTopProducts(params.startDate, params.endDate)
+  )
+  ipcMain.handle('db:get-sales-chart', (_, params) =>
+    db.getSalesChart(params.startDate, params.endDate)
+  )
 
   ipcMain.on('window-minimize', () => mainWindow.minimize())
   ipcMain.on('window-maximize', () => {

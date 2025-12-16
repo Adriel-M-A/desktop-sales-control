@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
-import { Download } from 'lucide-react'
+import { useState } from 'react'
+import { Download, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
+import { toast } from 'sonner'
 
 import StatsCards from '@/components/reports/StatsCards'
 import SalesChart from '@/components/reports/SalesChart'
@@ -17,29 +18,54 @@ export default function Reports() {
     cancelledCount: 0,
     cancelledAmount: 0
   })
-  const [topProducts, setTopProducts] = useState([])
-  const [chartData, setChartData] = useState([])
 
-  const loadDashboardData = async () => {
-    if (!window.api) return
+  const [topProducts, setTopProducts] = useState<any[]>([])
+  const [chartData, setChartData] = useState<any[]>([])
+  const [isApiAvailable, setIsApiAvailable] = useState(true)
+
+  const [currentRange, setCurrentRange] = useState<{ startDate: string; endDate: string } | null>(
+    null
+  )
+
+  const loadDashboardData = async (range: { startDate: string; endDate: string }) => {
+    // @ts-ignore
+    if (typeof window.api === 'undefined') {
+      console.warn('Reports: window.api no está definido.')
+      setIsApiAvailable(false)
+      return
+    }
 
     try {
-      const dashboardStats = await window.api.getDashboardStats()
-      setStats(dashboardStats)
+      setIsApiAvailable(true)
 
-      const top = await window.api.getTopProducts()
-      setTopProducts(top)
+      const [statsData, topData, chartData] = await Promise.all([
+        window.api.getDashboardStats(range),
+        window.api.getTopProducts(range),
+        window.api.getSalesChart(range)
+      ])
 
-      const chart = await window.api.getSalesChart()
-      setChartData(chart)
+      if (statsData) setStats(statsData)
+      if (Array.isArray(topData)) setTopProducts(topData)
+      if (Array.isArray(chartData)) setChartData(chartData)
     } catch (error) {
-      console.error('Error loading dashboard', error)
+      console.error('Error cargando reporte:', error)
+      toast.error('Error al actualizar datos del reporte')
     }
   }
 
-  useEffect(() => {
-    loadDashboardData()
-  }, [])
+  const handleFilterChange = (range: { startDate: string; endDate: string }) => {
+    setCurrentRange(range)
+    loadDashboardData(range)
+  }
+
+  const handleRefreshData = () => {
+    if (currentRange) {
+      loadDashboardData(currentRange)
+    }
+  }
+
+  // Calculamos el total de filas reales (Ventas OK + Ventas Canceladas)
+  const totalRowsInTable = stats.totalSales + stats.cancelledCount
 
   return (
     <div className="flex flex-col h-full bg-background overflow-hidden">
@@ -49,7 +75,9 @@ export default function Reports() {
             <h2 className="text-2xl font-bold tracking-tight text-foreground">
               Reportes y Estadísticas
             </h2>
-            <p className="text-sm text-muted-foreground">Análisis de rendimiento financiero.</p>
+            <p className="text-sm text-muted-foreground">
+              Análisis de rendimiento financiero en tiempo real.
+            </p>
           </div>
           <Button size="sm" variant="outline" className="bg-card hover:bg-muted shadow-sm">
             <Download className="mr-2 h-4 w-4" />
@@ -57,7 +85,14 @@ export default function Reports() {
           </Button>
         </div>
 
-        <ReportFilters />
+        {!isApiAvailable && (
+          <div className="bg-red-50 text-red-600 p-3 rounded-md flex items-center gap-2 text-sm border border-red-200">
+            <AlertCircle className="h-4 w-4" />
+            <span>Advertencia: No se detecta conexión con la base de datos.</span>
+          </div>
+        )}
+
+        <ReportFilters onFilterChange={handleFilterChange} />
       </div>
 
       <Separator className="bg-border/60" />
@@ -80,7 +115,12 @@ export default function Reports() {
               </h3>
             </div>
 
-            <SalesHistoryTable onSaleUpdated={loadDashboardData} />
+            {/* Pasamos el totalRows para que la paginación se vea bonita */}
+            <SalesHistoryTable
+              dateRange={currentRange}
+              onSaleUpdated={handleRefreshData}
+              totalRows={totalRowsInTable}
+            />
           </section>
         </div>
       </div>

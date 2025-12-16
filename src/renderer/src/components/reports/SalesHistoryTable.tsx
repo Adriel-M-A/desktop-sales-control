@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import {
   ChevronDown,
   ChevronRight,
@@ -6,9 +6,13 @@ import {
   CreditCard,
   Banknote,
   ArrowRightLeft,
-  ShoppingBag,
   Ban,
-  AlertTriangle
+  Loader2,
+  AlertCircle,
+  AlertTriangle,
+  Package,
+  RotateCcw, // Icono para Recuperar
+  CheckCircle // Icono para confirmación positiva
 } from 'lucide-react'
 import {
   Table,
@@ -32,32 +36,77 @@ import {
 
 interface SalesHistoryTableProps {
   onSaleUpdated?: () => void
+  dateRange: { startDate: string; endDate: string } | null
+  totalRows?: number
 }
 
-const ITEMS_PER_PAGE = 15
+const ITEMS_PER_PAGE = 10
 
-export default function SalesHistoryTable({ onSaleUpdated }: SalesHistoryTableProps) {
+export default function SalesHistoryTable({
+  onSaleUpdated,
+  dateRange,
+  totalRows = 0
+}: SalesHistoryTableProps) {
   const [sales, setSales] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
   const [expandedRows, setExpandedRows] = useState<number[]>([])
+
+  // Estado para anular venta
   const [saleIdToCancel, setSaleIdToCancel] = useState<number | null>(null)
+
+  // NUEVO: Estado para restaurar venta
+  const [saleIdToRestore, setSaleIdToRestore] = useState<number | null>(null)
+
   const [currentPage, setCurrentPage] = useState(1)
 
-  const loadSales = async (page: number) => {
+  const loadSales = async () => {
+    if (!dateRange) return
+
+    setIsLoading(true)
+    setError(null)
+
     try {
-      const offset = (page - 1) * ITEMS_PER_PAGE
-      const data = await window.api.getSales(ITEMS_PER_PAGE, offset)
-      setSales(data)
-    } catch (error) {
-      console.error(error)
+      await new Promise((resolve) => setTimeout(resolve, 300))
+
+      // @ts-ignore
+      if (!window.api || typeof window.api.getSales !== 'function') {
+        throw new Error('La API no está disponible.')
+      }
+
+      const offset = (currentPage - 1) * ITEMS_PER_PAGE
+
+      const data = await window.api.getSales({
+        limit: ITEMS_PER_PAGE,
+        offset,
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate
+      })
+
+      if (Array.isArray(data)) {
+        setSales(data)
+      } else {
+        setSales([])
+      }
+    } catch (err: any) {
+      console.error('Error cargando ventas:', err)
+      setError('No se pudo conectar con la base de datos.')
+    } finally {
+      setIsLoading(false)
     }
   }
 
   useEffect(() => {
-    loadSales(currentPage)
-  }, [currentPage])
+    setCurrentPage(1)
+  }, [dateRange])
+
+  useEffect(() => {
+    loadSales()
+  }, [currentPage, dateRange])
 
   const refresh = () => {
-    loadSales(currentPage)
+    loadSales()
     if (onSaleUpdated) onSaleUpdated()
   }
 
@@ -67,6 +116,7 @@ export default function SalesHistoryTable({ onSaleUpdated }: SalesHistoryTablePr
     )
   }
 
+  // --- LÓGICA DE ANULACIÓN ---
   const initiateCancel = (e: React.MouseEvent, id: number) => {
     e.stopPropagation()
     setSaleIdToCancel(id)
@@ -75,37 +125,92 @@ export default function SalesHistoryTable({ onSaleUpdated }: SalesHistoryTablePr
   const confirmCancel = async () => {
     if (saleIdToCancel === null) return
     try {
-      await window.api.cancelSale(saleIdToCancel)
-      toast.info('Venta anulada correctamente')
-      setSaleIdToCancel(null)
-      refresh()
+      // @ts-ignore
+      if (window.api) {
+        await window.api.cancelSale(saleIdToCancel)
+        toast.success('Venta anulada correctamente')
+        setSaleIdToCancel(null)
+        refresh()
+      }
     } catch (error) {
       toast.error('Error al anular venta')
     }
   }
 
-  const getPaymentIcon = (method: string) => {
-    switch (method) {
-      case 'Efectivo':
-        return <Banknote className="h-3 w-3 mr-1" />
-      case 'Tarjeta':
-        return <CreditCard className="h-3 w-3 mr-1" />
-      case 'Transferencia':
-        return <ArrowRightLeft className="h-3 w-3 mr-1" />
-      default:
-        return null
+  // --- NUEVA LÓGICA DE RESTAURACIÓN ---
+  const initiateRestore = (e: React.MouseEvent, id: number) => {
+    e.stopPropagation()
+    setSaleIdToRestore(id)
+  }
+
+  const confirmRestore = async () => {
+    if (saleIdToRestore === null) return
+    try {
+      // @ts-ignore
+      if (window.api) {
+        await window.api.restoreSale(saleIdToRestore)
+        toast.success('Venta recuperada exitosamente')
+        setSaleIdToRestore(null)
+        refresh()
+      }
+    } catch (error) {
+      toast.error('Error al recuperar venta')
     }
+  }
+
+  const formatDateTime = (dateString: string) => {
+    if (!dateString) return '-'
+    return new Date(dateString).toLocaleString('es-AR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  const getPaymentIcon = (method: string) => {
+    const m = (method || '').toLowerCase()
+    if (m.includes('efectivo')) return <Banknote className="h-3 w-3 mr-1" />
+    if (m.includes('tarjeta')) return <CreditCard className="h-3 w-3 mr-1" />
+    if (m.includes('transferencia')) return <ArrowRightLeft className="h-3 w-3 mr-1" />
+    return null
+  }
+
+  const totalPages = Math.ceil(totalRows / ITEMS_PER_PAGE) || 1
+  const startRange = (currentPage - 1) * ITEMS_PER_PAGE + 1
+  const endRange = Math.min(currentPage * ITEMS_PER_PAGE, totalRows)
+
+  if (isLoading) {
+    return (
+      <div className="rounded-xl border border-border bg-card shadow-sm h-[400px] flex flex-col items-center justify-center text-muted-foreground animate-pulse">
+        <Loader2 className="h-10 w-10 animate-spin mb-4 text-primary" />
+        <p className="text-sm font-medium">Cargando historial...</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-xl border border-destructive/20 bg-red-50/50 h-[200px] flex flex-col items-center justify-center text-red-600 p-6 text-center">
+        <AlertCircle className="h-10 w-10 mb-2" />
+        <h3 className="font-semibold">Error de Conexión</h3>
+        <p className="text-sm text-muted-foreground mb-4">No se pudieron cargar los datos.</p>
+        <Button variant="outline" size="sm" onClick={loadSales} className="bg-white">
+          Reintentar
+        </Button>
+      </div>
+    )
   }
 
   return (
     <>
-      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden flex flex-col">
+      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden flex flex-col transition-all duration-300">
         <div className="overflow-x-auto">
           <Table>
             <TableHeader className="bg-muted/40 sticky top-0 z-10">
               <TableRow className="hover:bg-transparent border-b-border">
                 <TableHead className="w-[50px]"></TableHead>
-                <TableHead className="w-[100px] font-semibold text-foreground">Hora</TableHead>
+                <TableHead className="font-semibold text-foreground">Fecha</TableHead>
                 <TableHead className="font-semibold text-foreground">Resumen</TableHead>
                 <TableHead className="text-center font-semibold text-foreground">Método</TableHead>
                 <TableHead className="text-right font-semibold text-foreground">Total</TableHead>
@@ -115,20 +220,23 @@ export default function SalesHistoryTable({ onSaleUpdated }: SalesHistoryTablePr
             <TableBody>
               {sales.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                    No hay historial de ventas.
+                  <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                    {!dateRange ? 'Selecciona un rango de fechas.' : 'No se encontraron ventas.'}
                   </TableCell>
                 </TableRow>
               ) : (
                 sales.map((sale) => {
                   const isExpanded = expandedRows.includes(sale.id)
                   const isCancelled = sale.status === 'cancelled'
-                  const dateObj = new Date(sale.timestamp)
+                  const items = Array.isArray(sale.items) ? sale.items : []
+                  const totalUnits = items.reduce(
+                    (acc: number, item: any) => acc + (item.quantity || 0),
+                    0
+                  )
 
                   return (
-                    <>
+                    <Fragment key={sale.id}>
                       <TableRow
-                        key={sale.id}
                         className={cn(
                           'cursor-pointer transition-colors border-b-border/50',
                           'hover:bg-muted/20',
@@ -138,7 +246,7 @@ export default function SalesHistoryTable({ onSaleUpdated }: SalesHistoryTablePr
                         )}
                         onClick={() => toggleRow(sale.id)}
                       >
-                        <TableCell>
+                        <TableCell className="p-2 text-center">
                           <Button
                             variant="ghost"
                             size="icon"
@@ -152,65 +260,60 @@ export default function SalesHistoryTable({ onSaleUpdated }: SalesHistoryTablePr
                           </Button>
                         </TableCell>
 
-                        <TableCell className="font-medium text-xs text-foreground">
-                          <div className="flex flex-col">
-                            <span className={cn(isCancelled && 'line-through')}>
-                              {dateObj.toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
-                            </span>
-                            <span className="text-[10px] text-muted-foreground">
-                              {dateObj.toLocaleDateString()}
-                            </span>
-                          </div>
+                        <TableCell className={cn('text-xs', isCancelled && 'line-through')}>
+                          {formatDateTime(sale.timestamp || sale.created_at)}
                         </TableCell>
 
                         <TableCell>
-                          <div className="flex items-center gap-2 text-sm text-foreground">
-                            <ShoppingBag className="h-4 w-4 text-muted-foreground" />
-                            <span
-                              className={cn(
-                                'font-medium',
-                                isCancelled && 'line-through decoration-muted-foreground'
-                              )}
-                            >
-                              Venta #{sale.id}
-                            </span>
-                            {isCancelled ? (
-                              <span className="ml-2 inline-flex items-center rounded-sm bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700 uppercase tracking-wide">
-                                Cancelado
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground text-xs">
-                                • {sale.items.length} ítems
-                              </span>
+                          <div
+                            className={cn(
+                              'flex items-center gap-2 text-sm',
+                              isCancelled && 'line-through text-muted-foreground'
                             )}
+                          >
+                            <Package className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-xs">
+                              {totalUnits} u. ({items.length} prods.)
+                            </span>
                           </div>
                         </TableCell>
 
                         <TableCell className="text-center">
-                          <div
-                            className={cn(
-                              'inline-flex items-center rounded-md px-2 py-1 text-xs font-medium border',
-                              isCancelled
-                                ? 'bg-transparent border-transparent text-muted-foreground'
-                                : 'bg-background border-border text-foreground'
-                            )}
-                          >
-                            {getPaymentIcon(sale.paymentMethod)}
-                            {sale.paymentMethod}
-                          </div>
+                          {isCancelled ? (
+                            <span className="inline-flex items-center rounded-sm bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700 uppercase tracking-wide border border-red-200">
+                              CANCELADO
+                            </span>
+                          ) : (
+                            <div className="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium border bg-background border-border text-foreground">
+                              {getPaymentIcon(sale.payment_method || sale.paymentMethod)}
+                              {sale.payment_method || sale.paymentMethod}
+                            </div>
+                          )}
                         </TableCell>
 
-                        <TableCell className="text-right font-bold text-foreground">
-                          <span className={cn(isCancelled && 'line-through text-muted-foreground')}>
-                            ${sale.total.toLocaleString()}
-                          </span>
+                        <TableCell
+                          className={cn(
+                            'text-right font-bold text-foreground',
+                            isCancelled && 'line-through text-muted-foreground'
+                          )}
+                        >
+                          ${Number(sale.total_amount || sale.total).toLocaleString()}
                         </TableCell>
 
                         <TableCell>
-                          {!isCancelled && (
+                          {isCancelled ? (
+                            // BOTÓN DE RECUPERAR (Solo visible si está cancelado)
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-green-600 hover:bg-green-50"
+                              onClick={(e) => initiateRestore(e, sale.id)}
+                              title="Recuperar Venta"
+                            >
+                              <RotateCcw className="h-4 w-4" />
+                            </Button>
+                          ) : (
+                            // BOTÓN DE ANULAR (Solo visible si NO está cancelado)
                             <Button
                               variant="ghost"
                               size="icon"
@@ -234,7 +337,9 @@ export default function SalesHistoryTable({ onSaleUpdated }: SalesHistoryTablePr
                           <TableCell colSpan={6} className="p-0">
                             <div className="p-4 pl-14 grid gap-4 animate-in slide-in-from-top-2 duration-200">
                               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                {isCancelled ? 'Detalle (Anulado)' : 'Detalle de productos'}
+                                {isCancelled
+                                  ? 'Detalle (Anulado)'
+                                  : `Detalle de la venta #${sale.id}`}
                               </p>
                               <div
                                 className={cn(
@@ -243,20 +348,37 @@ export default function SalesHistoryTable({ onSaleUpdated }: SalesHistoryTablePr
                                 )}
                               >
                                 <Table>
+                                  <TableHeader>
+                                    <TableRow className="h-8 hover:bg-transparent">
+                                      <TableHead className="h-8 text-xs">Producto</TableHead>
+                                      <TableHead className="h-8 text-xs text-right">
+                                        Cant.
+                                      </TableHead>
+                                      <TableHead className="h-8 text-xs text-right">
+                                        Precio U.
+                                      </TableHead>
+                                      <TableHead className="h-8 text-xs text-right">
+                                        Subtotal
+                                      </TableHead>
+                                    </TableRow>
+                                  </TableHeader>
                                   <TableBody>
-                                    {sale.items.map((item: any, index: number) => (
+                                    {items.map((item: any, index: number) => (
                                       <TableRow
                                         key={index}
-                                        className="hover:bg-transparent border-b-border/50 last:border-0"
+                                        className="hover:bg-transparent border-b-border/50 last:border-0 h-8"
                                       >
-                                        <TableCell className="py-2 text-sm text-foreground">
+                                        <TableCell className="py-1 text-xs text-foreground">
                                           {item.product_name}
                                         </TableCell>
-                                        <TableCell className="py-2 text-right text-sm text-muted-foreground">
-                                          {item.quantity} x ${item.unit_price.toLocaleString()}
+                                        <TableCell className="py-1 text-right text-xs text-muted-foreground">
+                                          {item.quantity}
                                         </TableCell>
-                                        <TableCell className="py-2 text-right font-medium text-sm text-foreground">
-                                          ${item.subtotal.toLocaleString()}
+                                        <TableCell className="py-1 text-right font-medium text-xs text-foreground">
+                                          ${Number(item.unit_price).toLocaleString()}
+                                        </TableCell>
+                                        <TableCell className="py-1 text-right font-bold text-xs text-foreground">
+                                          ${Number(item.subtotal).toLocaleString()}
                                         </TableCell>
                                       </TableRow>
                                     ))}
@@ -267,7 +389,7 @@ export default function SalesHistoryTable({ onSaleUpdated }: SalesHistoryTablePr
                           </TableCell>
                         </TableRow>
                       )}
-                    </>
+                    </Fragment>
                   )
                 })
               )}
@@ -275,31 +397,43 @@ export default function SalesHistoryTable({ onSaleUpdated }: SalesHistoryTablePr
           </Table>
         </div>
 
-        <div className="flex items-center justify-end p-4 border-t border-border bg-muted/10 gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-            className="h-8 w-8 p-0 bg-card hover:bg-muted border-border"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
+        {/* PIE DE PÁGINA */}
+        {sales.length > 0 && (
+          <div className="flex items-center justify-between p-4 border-t border-border bg-muted/10">
+            <div className="text-xs text-muted-foreground">
+              Mostrando {startRange}-{endRange} de {totalRows} movimientos
+            </div>
 
-          <div className="text-sm font-medium px-2 text-center">Página {currentPage}</div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1 || isLoading}
+                className="bg-card hover:bg-muted"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setCurrentPage((p) => p + 1)}
-            disabled={sales.length < ITEMS_PER_PAGE}
-            className="h-8 w-8 p-0 bg-card hover:bg-muted border-border"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
+              <div className="text-sm font-medium px-2 min-w-[3rem] text-center bg-card py-1 rounded-md border shadow-sm">
+                {currentPage} / {totalPages}
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages || isLoading}
+                className="bg-card hover:bg-muted"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
+      {/* DIÁLOGO DE ANULACIÓN */}
       <Dialog
         open={saleIdToCancel !== null}
         onOpenChange={(open) => !open && setSaleIdToCancel(null)}
@@ -311,7 +445,8 @@ export default function SalesHistoryTable({ onSaleUpdated }: SalesHistoryTablePr
               ¿Anular esta venta?
             </DialogTitle>
             <DialogDescription className="pt-2 text-muted-foreground">
-              Esta acción marcará la venta como cancelada y afectará los reportes.
+              Esta acción marcará la venta como cancelada y afectará los reportes financieros
+              inmediatamente.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">
@@ -324,6 +459,36 @@ export default function SalesHistoryTable({ onSaleUpdated }: SalesHistoryTablePr
             </Button>
             <Button variant="destructive" onClick={confirmCancel}>
               Sí, anular venta
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* DIÁLOGO DE RESTAURACIÓN */}
+      <Dialog
+        open={saleIdToRestore !== null}
+        onOpenChange={(open) => !open && setSaleIdToRestore(null)}
+      >
+        <DialogContent className="sm:max-w-md bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-600">
+              <CheckCircle className="h-5 w-5" />
+              ¿Recuperar esta venta?
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-muted-foreground">
+              La venta volverá a contarse como válida en los reportes y estadísticas.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setSaleIdToRestore(null)}
+              className="bg-card hover:bg-muted text-foreground"
+            >
+              Cancelar
+            </Button>
+            <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={confirmRestore}>
+              Sí, recuperar
             </Button>
           </DialogFooter>
         </DialogContent>
