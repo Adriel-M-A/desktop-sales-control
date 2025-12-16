@@ -318,3 +318,8 @@ export const getSalesChart = (startDate: string, endDate: string) => {
 
   return filledData
 }
+
+export const getProductByCode = (code: string) => {
+  // Busca un producto activo que coincida EXACTAMENTE con el código
+  return db.prepare('SELECT * FROM products WHERE code = ? AND is_active = 1').get(code)
+}

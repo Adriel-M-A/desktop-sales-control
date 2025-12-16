@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import Cart from '@/components/cart/Cart'
 import ProductFilter from '@/components/sales/ProductFilter'
@@ -22,8 +22,14 @@ export default function Sales() {
   const [cart, setCart] = useState<CartItem[]>([])
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('Efectivo')
 
+  // Buffer para almacenar las teclas del escáner temporalmente
+  const barcodeBuffer = useRef('')
+  const lastKeyTime = useRef(Date.now())
+
+  // --- CARGA DE PRODUCTOS (Grilla) ---
   const loadProducts = async (search = '') => {
     try {
+      // @ts-ignore
       const data = await window.api.getProducts(search)
       setProducts(data)
     } catch (error) {
@@ -35,6 +41,7 @@ export default function Sales() {
     loadProducts(searchQuery)
   }, [searchQuery])
 
+  // --- LÓGICA DEL CARRITO ---
   const addToCart = (product: Product) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id)
@@ -65,6 +72,72 @@ export default function Sales() {
 
   const clearCart = () => setCart([])
 
+  // --- LÓGICA DE ESCANEO INVISIBLE (GLOBAL) ---
+  useEffect(() => {
+    const handleGlobalKeyDown = async (e: KeyboardEvent) => {
+      // 1. Calculamos tiempo entre teclas para saber si es escáner o humano
+      const currentTime = Date.now()
+      const timeDiff = currentTime - lastKeyTime.current
+      lastKeyTime.current = currentTime
+
+      // Si pasa mucho tiempo (ej: más de 100ms) entre teclas, reiniciamos el buffer
+      // (Asumimos que el escáner escribe muy rápido)
+      if (timeDiff > 100) {
+        barcodeBuffer.current = ''
+      }
+
+      // 2. Si es ENTER, intentamos procesar el código acumulado
+      if (e.key === 'Enter') {
+        const code = barcodeBuffer.current
+
+        if (code.length > 0) {
+          // Intentamos buscar el producto
+          try {
+            // @ts-ignore
+            const product = await window.api.getProductByCode(code)
+
+            if (product) {
+              // ¡ÉXITO! Lo encontramos, lo agregamos al carrito
+              addToCart(product)
+              toast.success(`Escaneado: ${product.name}`)
+
+              // Opcional: Si el foco estaba en el buscador, limpiamos el buscador
+              // para que no quede el número escrito ahí molestando.
+              if (document.activeElement instanceof HTMLInputElement) {
+                document.activeElement.value = ''
+                // Disparamos evento de cambio para que React se entere (si fuera necesario)
+                setSearchQuery('')
+              }
+            }
+            // Nota: Si no encuentra producto, no hacemos nada (silencioso)
+            // para no molestar si el usuario estaba simplemente dando Enter en otro lado.
+          } catch (error) {
+            console.error('Error scanning:', error)
+          }
+        }
+
+        // Limpiamos buffer después del Enter
+        barcodeBuffer.current = ''
+        return
+      }
+
+      // 3. Si es una tecla imprimible (letra o número), la guardamos en el buffer
+      if (e.key.length === 1) {
+        barcodeBuffer.current += e.key
+      }
+    }
+
+    // Activamos el listener
+    window.addEventListener('keydown', handleGlobalKeyDown)
+
+    // Limpieza al salir de la página
+    return () => {
+      window.removeEventListener('keydown', handleGlobalKeyDown)
+    }
+  }, []) // El array vacío asegura que el listener se crea una sola vez,
+  // pero ojo: addToCart debe ser estable o usarse dentro de setProducts/setCart
+
+  // --- PROCESAR VENTA ---
   const handleCheckout = async () => {
     if (cart.length === 0) return
 
@@ -82,6 +155,7 @@ export default function Sales() {
         }))
       }
 
+      // @ts-ignore
       const result = await window.api.createSale(saleData)
 
       if (result.success) {
@@ -97,6 +171,7 @@ export default function Sales() {
 
   return (
     <div className="flex h-full w-full bg-background overflow-hidden">
+      {/* SECCIÓN PRINCIPAL: FILTROS + GRILLA */}
       <div className="flex flex-1 flex-col h-full min-w-0 min-h-0">
         <div className="flex-none p-4">
           <ProductFilter onSearch={setSearchQuery} />
@@ -107,6 +182,7 @@ export default function Sales() {
         <ProductGrid products={products} onAddToCart={addToCart} />
       </div>
 
+      {/* SECCIÓN LATERAL: CARRITO */}
       <aside className="hidden md:flex w-[450px] flex-col h-full border-l border-border bg-card shadow-xl z-20 overflow-hidden">
         <Cart
           items={cart}

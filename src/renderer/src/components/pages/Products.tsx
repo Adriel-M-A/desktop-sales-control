@@ -18,6 +18,7 @@ export default function Products() {
 
   const loadProducts = async (search = '', showAll = false) => {
     try {
+      // @ts-ignore
       const data = await window.api.getProducts(search, showAll)
 
       const formattedData = data.map((p: any) => ({
@@ -38,11 +39,16 @@ export default function Products() {
 
   const handleCreateProduct = async (values: { code: string; name: string; price: number }) => {
     try {
+      // @ts-ignore
       await window.api.createProduct(values)
       toast.success('Producto guardado correctamente')
       loadProducts(searchQuery, showInactive)
-    } catch (error) {
-      toast.error('Error al guardar')
+    } catch (error: any) {
+      if (error.message?.includes('UNIQUE')) {
+        toast.error('Error: El código ya existe')
+      } else {
+        toast.error('Error al guardar')
+      }
     }
   }
 
@@ -52,6 +58,7 @@ export default function Products() {
 
   const handleDelete = async (id: number) => {
     try {
+      // @ts-ignore
       await window.api.deleteProduct(id)
       toast.success('Producto desactivado')
       loadProducts(searchQuery, showInactive)
@@ -65,6 +72,7 @@ export default function Products() {
     if (!product) return
 
     try {
+      // @ts-ignore
       await window.api.toggleProductStatus(id, !product.isActive)
       toast.success(product.isActive ? 'Producto desactivado' : 'Producto reactivado')
       loadProducts(searchQuery, showInactive)

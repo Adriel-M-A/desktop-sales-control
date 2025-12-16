@@ -32,6 +32,7 @@ declare global {
       }>
       getTopProducts: (range: { startDate: string; endDate: string }) => Promise<any[]>
       getSalesChart: (range: { startDate: string; endDate: string }) => Promise<any[]>
+      getProductByCode: (code: string) => Promise<any>
     }
   }
 }

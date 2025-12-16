@@ -57,6 +57,8 @@ function createWindow(): void {
     db.getSalesChart(params.startDate, params.endDate)
   )
 
+  ipcMain.handle('db:get-product-by-code', (_, code) => db.getProductByCode(code))
+
   ipcMain.on('window-minimize', () => mainWindow.minimize())
   ipcMain.on('window-maximize', () => {
     mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize()

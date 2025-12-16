@@ -28,7 +28,9 @@ const api = {
   getTopProducts: (range: { startDate: string; endDate: string }) =>
     ipcRenderer.invoke('db:get-top-products', range),
   getSalesChart: (range: { startDate: string; endDate: string }) =>
-    ipcRenderer.invoke('db:get-sales-chart', range)
+    ipcRenderer.invoke('db:get-sales-chart', range),
+
+  getProductByCode: (code: string) => ipcRenderer.invoke('db:get-product-by-code', code)
 }
 
 if (process.contextIsolated) {
