@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts'
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
 
 interface SalesChartProps {
   data: { date: string; total: number }[]
@@ -10,11 +10,10 @@ export default function SalesChart({ data }: SalesChartProps) {
     <Card className="col-span-4 bg-card shadow-sm border-border/50 flex flex-col h-full">
       <CardHeader className="pb-3">
         <CardTitle className="text-lg font-semibold text-foreground">
-          Ingresos (Últimos 7 días)
+          Evolución de Ingresos
         </CardTitle>
       </CardHeader>
 
-      {/* Usamos p-0 para tener control total de la altura, igual que en TopProducts */}
       <CardContent className="p-0 flex-1">
         <div className="h-[350px] w-full px-4 pb-4">
           {data.length === 0 ? (
@@ -25,20 +24,26 @@ export default function SalesChart({ data }: SalesChartProps) {
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                {/* Agregamos una grilla suave para mejor lectura */}
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  vertical={false}
+                  stroke="hsl(var(--border))"
+                  opacity={0.4}
+                />
+
                 <XAxis
-                  dataKey="date"
+                  dataKey="date" // El backend ya nos manda "10:00", "Ene 2023", etc.
                   stroke="#888888"
                   fontSize={12}
                   tickLine={false}
                   axisLine={false}
                   className="text-muted-foreground"
-                  tickFormatter={(value) => {
-                    // Formateamos la fecha para que ocupe menos espacio (ej: 01/10)
-                    if (!value) return ''
-                    const date = new Date(value)
-                    return `${date.getDate()}/${date.getMonth() + 1}`
-                  }}
+                  // Si hay muchas barras (ej: horas), mostramos intercaladas
+                  interval="preserveStartEnd"
+                  minTickGap={30}
                 />
+
                 <YAxis
                   stroke="#888888"
                   fontSize={12}
@@ -48,6 +53,7 @@ export default function SalesChart({ data }: SalesChartProps) {
                   className="text-muted-foreground"
                   width={60}
                 />
+
                 <Tooltip
                   cursor={{ fill: 'var(--muted)', opacity: 0.2 }}
                   contentStyle={{
@@ -59,14 +65,15 @@ export default function SalesChart({ data }: SalesChartProps) {
                   }}
                   labelStyle={{ color: 'hsl(var(--muted-foreground))', marginBottom: '0.25rem' }}
                   itemStyle={{ color: 'hsl(var(--primary))', fontWeight: 'bold' }}
-                  formatter={(value: number) => [`$${value.toLocaleString()}`, 'Ingresos']}
+                  formatter={(value: number) => [`$${value.toLocaleString()}`, 'Ventas']}
                 />
+
                 <Bar
                   dataKey="total"
                   fill="hsl(var(--primary))"
                   radius={[4, 4, 0, 0]}
                   className="fill-primary"
-                  maxBarSize={60}
+                  maxBarSize={60} // Evita barras extremadamente anchas si hay pocos datos
                 />
               </BarChart>
             </ResponsiveContainer>
