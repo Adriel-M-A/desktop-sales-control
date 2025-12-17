@@ -1,10 +1,19 @@
 import { useState, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
+import { ShoppingCart, ChevronUp, X } from 'lucide-react'
+
+// Componentes propios
 import Cart from '@/components/cart/Cart'
 import ProductFilter from '@/components/sales/ProductFilter'
 import ProductGrid from '@/components/sales/ProductGrid'
-import { Separator } from '@/components/ui/separator'
 
+// Componentes UI
+import { Separator } from '@/components/ui/separator'
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+
+// Interfaces
 interface Product {
   id: number
   code: string
@@ -17,16 +26,18 @@ interface CartItem extends Product {
 }
 
 export default function Sales() {
+  // --- ESTADOS ---
   const [products, setProducts] = useState<Product[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [cart, setCart] = useState<CartItem[]>([])
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('Efectivo')
+  const [isMobileCartOpen, setIsMobileCartOpen] = useState(false)
 
-  // Buffer para almacenar las teclas del escáner temporalmente
+  // Buffer para el escáner
   const barcodeBuffer = useRef('')
   const lastKeyTime = useRef(Date.now())
 
-  // --- CARGA DE PRODUCTOS (Grilla) ---
+  // --- CARGA DE DATOS ---
   const loadProducts = async (search = '') => {
     try {
       // @ts-ignore
@@ -34,6 +45,7 @@ export default function Sales() {
       setProducts(data)
     } catch (error) {
       console.error(error)
+      toast.error('Error al cargar productos')
     }
   }
 
@@ -72,80 +84,63 @@ export default function Sales() {
 
   const clearCart = () => setCart([])
 
-  // --- LÓGICA DE ESCANEO INVISIBLE (GLOBAL) ---
+  // --- LÓGICA DE ESCÁNER (GLOBAL) ---
   useEffect(() => {
-    const handleGlobalKeyDown = async (e: KeyboardEvent) => {
-      // 1. Calculamos tiempo entre teclas para saber si es escáner o humano
-      const currentTime = Date.now()
-      const timeDiff = currentTime - lastKeyTime.current
-      lastKeyTime.current = currentTime
+    const handleGlobalScan = async (e: KeyboardEvent) => {
+      // 1. Ignorar si el usuario escribe en el buscador
+      if (document.activeElement instanceof HTMLInputElement) return
 
-      // Si pasa mucho tiempo (ej: más de 100ms) entre teclas, reiniciamos el buffer
-      // (Asumimos que el escáner escribe muy rápido)
-      if (timeDiff > 100) {
+      // 2. Control de velocidad (Buffer)
+      const currentTime = Date.now()
+      if (currentTime - lastKeyTime.current > 100) {
         barcodeBuffer.current = ''
       }
+      lastKeyTime.current = currentTime
 
-      // 2. Si es ENTER, intentamos procesar el código acumulado
+      // 3. Procesar Enter
       if (e.key === 'Enter') {
-        const code = barcodeBuffer.current
+        const code = barcodeBuffer.current.trim()
 
         if (code.length > 0) {
-          // Intentamos buscar el producto
+          const toastId = toast.loading('Procesando código...')
           try {
             // @ts-ignore
             const product = await window.api.getProductByCode(code)
 
             if (product) {
-              // ¡ÉXITO! Lo encontramos, lo agregamos al carrito
               addToCart(product)
-              toast.success(`Escaneado: ${product.name}`)
-
-              // Opcional: Si el foco estaba en el buscador, limpiamos el buscador
-              // para que no quede el número escrito ahí molestando.
-              if (document.activeElement instanceof HTMLInputElement) {
-                document.activeElement.value = ''
-                // Disparamos evento de cambio para que React se entere (si fuera necesario)
-                setSearchQuery('')
-              }
+              toast.success(`Agregado: ${product.name}`, { id: toastId })
+            } else {
+              toast.error('Producto no encontrado', {
+                id: toastId,
+                description: `El código ${code} no existe.`
+              })
             }
-            // Nota: Si no encuentra producto, no hacemos nada (silencioso)
-            // para no molestar si el usuario estaba simplemente dando Enter en otro lado.
           } catch (error) {
-            console.error('Error scanning:', error)
+            console.error(error)
+            toast.error('Error de lectura', { id: toastId })
           }
         }
-
-        // Limpiamos buffer después del Enter
         barcodeBuffer.current = ''
-        return
-      }
-
-      // 3. Si es una tecla imprimible (letra o número), la guardamos en el buffer
-      if (e.key.length === 1) {
+      } else if (e.key.length === 1) {
         barcodeBuffer.current += e.key
       }
     }
 
-    // Activamos el listener
-    window.addEventListener('keydown', handleGlobalKeyDown)
+    window.addEventListener('keydown', handleGlobalScan)
+    return () => window.removeEventListener('keydown', handleGlobalScan)
+  }, [])
 
-    // Limpieza al salir de la página
-    return () => {
-      window.removeEventListener('keydown', handleGlobalKeyDown)
-    }
-  }, []) // El array vacío asegura que el listener se crea una sola vez,
-  // pero ojo: addToCart debe ser estable o usarse dentro de setProducts/setCart
-
-  // --- PROCESAR VENTA ---
-  const handleCheckout = async () => {
+  // --- FINALIZAR VENTA ---
+  const handleCheckout = async (paymentMethodOverride?: string) => {
     if (cart.length === 0) return
 
+    const method = paymentMethodOverride || selectedPaymentMethod
     const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
 
     try {
       const saleData = {
-        paymentMethod: selectedPaymentMethod,
+        paymentMethod: method,
         total,
         items: cart.map((item) => ({
           id: item.id,
@@ -162,6 +157,7 @@ export default function Sales() {
         toast.success(`Venta #${result.saleId} registrada con éxito`)
         clearCart()
         setSelectedPaymentMethod('Efectivo')
+        setIsMobileCartOpen(false) // Cerrar sheet móvil si está abierto
       }
     } catch (error) {
       console.error(error)
@@ -169,9 +165,17 @@ export default function Sales() {
     }
   }
 
+  // Cálculos para la barra móvil
+  const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0)
+  const totalAmount = cart.reduce((acc, item) => acc + item.price * item.quantity, 0)
+
   return (
-    <div className="flex h-full w-full bg-background overflow-hidden">
-      {/* SECCIÓN PRINCIPAL: FILTROS + GRILLA */}
+    <div className="flex h-full w-full bg-background overflow-hidden relative">
+      {/* =========================================
+          IZQUIERDA: PRODUCTOS (Grid)
+          Ocupa todo el ancho en Móvil.
+          Comparte espacio en Desktop/Tablet.
+         ========================================= */}
       <div className="flex flex-1 flex-col h-full min-w-0 min-h-0">
         <div className="flex-none p-4">
           <ProductFilter onSearch={setSearchQuery} />
@@ -179,11 +183,20 @@ export default function Sales() {
 
         <Separator className="flex-none bg-border/60" />
 
-        <ProductGrid products={products} onAddToCart={addToCart} />
+        {/* pb-24 en móvil: Para que el último producto no quede tapado por la barra flotante.
+           md:pb-0: En tablet/desktop no hay barra flotante.
+        */}
+        <div className="flex-1 overflow-y-auto pb-24 md:pb-0 p-1">
+          <ProductGrid products={products} onAddToCart={addToCart} />
+        </div>
       </div>
 
-      {/* SECCIÓN LATERAL: CARRITO */}
-      <aside className="hidden md:flex w-[450px] flex-col h-full border-l border-border bg-card shadow-xl z-20 overflow-hidden">
+      {/* =========================================
+          DERECHA: CARRITO (Panel Lateral)
+          Modo Desktop/Tablet: Visible (hidden md:flex)
+          Ancho adaptable: w-[320px] en Tablet, más ancho en Desktop.
+         ========================================= */}
+      <aside className="hidden md:flex w-[320px] lg:w-[420px] flex-col h-full border-l border-border bg-card shadow-xl z-20 overflow-hidden transition-all duration-300">
         <Cart
           items={cart}
           selectedPaymentMethod={selectedPaymentMethod}
@@ -192,9 +205,86 @@ export default function Sales() {
           onDecrease={(id) => updateQuantity(id, -1)}
           onRemove={removeFromCart}
           onClear={clearCart}
-          onCheckout={handleCheckout}
+          onCheckout={() => handleCheckout()}
         />
       </aside>
+
+      {/* =========================================
+          MÓVIL: BARRA FLOTANTE + SHEET
+          Modo Móvil: Visible (md:hidden)
+         ========================================= */}
+      <div className="md:hidden">
+        {/* Barra Flotante Inferior */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 bg-background/95 backdrop-blur-sm border-t z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+          <Sheet open={isMobileCartOpen} onOpenChange={setIsMobileCartOpen}>
+            <SheetTrigger asChild>
+              <Button
+                size="lg"
+                className="w-full h-14 justify-between animate-in slide-in-from-bottom-2 shadow-md"
+              >
+                {/* Lado Izquierdo: Icono + Badge */}
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <ShoppingCart className="h-5 w-5" />
+                    {totalItems > 0 && (
+                      <Badge className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 bg-destructive hover:bg-destructive text-destructive-foreground border-2 border-primary">
+                        {totalItems}
+                      </Badge>
+                    )}
+                  </div>
+                  <span className="font-semibold text-base">Ver Carrito</span>
+                </div>
+
+                {/* Lado Derecho: Total + Chevron */}
+                <div className="flex items-center gap-3">
+                  <span className="text-lg font-bold">${totalAmount.toLocaleString()}</span>
+                  <ChevronUp className="h-5 w-5 opacity-70" />
+                </div>
+              </Button>
+            </SheetTrigger>
+
+            {/* Contenido Desplegable (Sheet) */}
+            <SheetContent
+              side="bottom"
+              className="h-[100vh] p-0 rounded-none flex flex-col [&>button]:hidden"
+            >
+              <SheetTitle className="sr-only">Carrito de Compras</SheetTitle>
+
+              {/* --- HEADER PERSONALIZADO (Cerrar) --- */}
+              <div className="flex items-center justify-between p-4 border-b bg-muted/20">
+                <div className="flex items-center gap-2">
+                  <ShoppingCart className="h-5 w-5 text-primary" />
+                  <h2 className="font-bold text-lg">Tu Pedido</h2>
+                </div>
+
+                {/* Botón X grande y claro */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsMobileCartOpen(false)}
+                  className="h-10 w-10 rounded-full hover:bg-red-100 hover:text-red-600 transition-colors"
+                >
+                  <X className="h-6 w-6" />
+                </Button>
+              </div>
+
+              {/* Reutilizamos el componente Cart */}
+              <div className="flex-1 overflow-hidden bg-background">
+                <Cart
+                  items={cart}
+                  selectedPaymentMethod={selectedPaymentMethod}
+                  onSelectPaymentMethod={setSelectedPaymentMethod}
+                  onIncrease={(id) => updateQuantity(id, 1)}
+                  onDecrease={(id) => updateQuantity(id, -1)}
+                  onRemove={removeFromCart}
+                  onClear={clearCart}
+                  onCheckout={(method) => handleCheckout(method)}
+                />
+              </div>
+            </SheetContent>
+          </Sheet>
+        </div>
+      </div>
     </div>
   )
 }

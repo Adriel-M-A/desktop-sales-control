@@ -4,19 +4,32 @@ import { NavLink } from 'react-router-dom'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { NotebookPen } from 'lucide-react'
 
-export function Sidebar({ className }: { className?: string }) {
+interface SidebarProps {
+  className?: string
+  onMobileClick?: () => void
+  collapsed?: boolean // <--- NUEVA PROP
+}
+
+export function Sidebar({ className, onMobileClick, collapsed = false }: SidebarProps) {
   return (
     <div
       className={cn(
-        'flex h-screen w-64 flex-col border-r bg-sidebar text-sidebar-foreground',
+        'flex h-full flex-col border-r bg-sidebar text-sidebar-foreground transition-all duration-300',
+        collapsed ? 'w-16' : 'w-64', // Cambio de ancho dinámico
         className
       )}
     >
       {/* Header / Logo */}
-      <div className="flex h-16 items-center border-b border-sidebar-accent px-6">
+      <div
+        className={cn(
+          'flex h-16 shrink-0 items-center border-b border-sidebar-accent',
+          collapsed ? 'justify-center px-0' : 'px-6'
+        )}
+      >
         <div className="flex items-center gap-2 font-bold text-xl tracking-tight">
-          <NotebookPen />
-          <span>Control de Ventas</span>
+          <NotebookPen className="h-6 w-6" />
+          {/* Ocultamos el texto si está colapsado */}
+          {!collapsed && <span className="animate-in fade-in duration-300">Control</span>}
         </div>
       </div>
 
@@ -27,9 +40,14 @@ export function Sidebar({ className }: { className?: string }) {
             <NavLink
               key={item.href}
               to={item.href}
+              onClick={onMobileClick}
+              title={collapsed ? item.title : undefined} // Tooltip nativo simple
               className={({ isActive }) =>
                 cn(
-                  'flex items-center gap-3 rounded-md px-4 py-2.5 text-base font-medium transition-colors',
+                  'flex items-center rounded-md py-2.5 transition-colors',
+                  // Ajuste de padding y justificación según estado
+                  collapsed ? 'justify-center px-0' : 'gap-3 px-4',
+
                   'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                   isActive
                     ? 'bg-primary text-primary-foreground shadow-sm'
@@ -37,8 +55,9 @@ export function Sidebar({ className }: { className?: string }) {
                 )
               }
             >
-              <item.icon className="h-5 w-5" />
-              {item.title}
+              <item.icon className="h-5 w-5 shrink-0" />
+              {/* Ocultamos el texto del link si está colapsado */}
+              {!collapsed && <span>{item.title}</span>}
             </NavLink>
           ))}
         </nav>
