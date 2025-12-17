@@ -1,19 +1,22 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { ShoppingCart, ChevronUp, X } from 'lucide-react'
+import { ShoppingCart, ChevronUp, X, PlusCircle } from 'lucide-react'
 
-// Componentes propios
+// Hook
+import { useBarcodeScanner } from '@/hooks/useBarcodeScanner'
+
+// Componentes
 import Cart from '@/components/cart/Cart'
 import ProductFilter from '@/components/sales/ProductFilter'
 import ProductGrid from '@/components/sales/ProductGrid'
+// IMPORTANTE: Importamos el Dialog y sus tipos
+import ProductDialog, { ProductFormData } from '@/components/products/ProductDialog'
 
-// Componentes UI
 import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
-// Interfaces
 interface Product {
   id: number
   code: string
@@ -33,11 +36,11 @@ export default function Sales() {
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('Efectivo')
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false)
 
-  // Buffer para el escáner
-  const barcodeBuffer = useRef('')
-  const lastKeyTime = useRef(Date.now())
+  // --- NUEVOS ESTADOS PARA CREACIÓN RÁPIDA ---
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [scannedCodeForNew, setScannedCodeForNew] = useState('')
 
-  // --- CARGA DE DATOS ---
+  // --- CARGA DE PRODUCTOS ---
   const loadProducts = async (search = '') => {
     try {
       // @ts-ignore
@@ -45,7 +48,6 @@ export default function Sales() {
       setProducts(data)
     } catch (error) {
       console.error(error)
-      toast.error('Error al cargar productos')
     }
   }
 
@@ -84,62 +86,96 @@ export default function Sales() {
 
   const clearCart = () => setCart([])
 
-  // --- LÓGICA DE ESCÁNER (GLOBAL) ---
-  useEffect(() => {
-    const handleGlobalScan = async (e: KeyboardEvent) => {
-      // 1. Ignorar si el usuario escribe en el buscador
-      if (document.activeElement instanceof HTMLInputElement) return
+  // --- LÓGICA DE ESCÁNER ---
+  const handleProductScan = async (code: string) => {
+    // Si el diálogo de creación ya está abierto, no hacemos nada (el diálogo maneja sus teclas)
+    if (isCreateDialogOpen) return
 
-      // 2. Control de velocidad (Buffer)
-      const currentTime = Date.now()
-      if (currentTime - lastKeyTime.current > 100) {
-        barcodeBuffer.current = ''
-      }
-      lastKeyTime.current = currentTime
+    const toastId = toast.loading('Buscando...')
+    try {
+      // @ts-ignore
+      const product = await window.api.getProductByCode(code)
 
-      // 3. Procesar Enter
-      if (e.key === 'Enter') {
-        const code = barcodeBuffer.current.trim()
-
-        if (code.length > 0) {
-          const toastId = toast.loading('Procesando código...')
-          try {
-            // @ts-ignore
-            const product = await window.api.getProductByCode(code)
-
-            if (product) {
-              addToCart(product)
-              toast.success(`Agregado: ${product.name}`, { id: toastId })
-            } else {
-              toast.error('Producto no encontrado', {
-                id: toastId,
-                description: `El código ${code} no existe.`
-              })
+      if (product) {
+        addToCart(product)
+        toast.success(`Agregado: ${product.name}`, { id: toastId })
+      } else {
+        // --- AQUÍ ESTÁ LA MAGIA ---
+        // Si no existe, ofrecemos crearlo con un botón en la notificación
+        toast.error('Producto no encontrado', {
+          id: toastId,
+          description: `El código ${code} no existe en el sistema.`,
+          action: {
+            label: 'Crear Ahora',
+            onClick: () => {
+              setScannedCodeForNew(code) // Guardamos el código
+              setIsCreateDialogOpen(true) // Abrimos el modal
             }
-          } catch (error) {
-            console.error(error)
-            toast.error('Error de lectura', { id: toastId })
-          }
-        }
-        barcodeBuffer.current = ''
-      } else if (e.key.length === 1) {
-        barcodeBuffer.current += e.key
+          },
+          duration: 5000 // Damos 5 segundos para que decida
+        })
       }
+    } catch (error) {
+      console.error(error)
+      toast.error('Error de lectura', { id: toastId })
     }
+  }
 
-    window.addEventListener('keydown', handleGlobalScan)
-    return () => window.removeEventListener('keydown', handleGlobalScan)
-  }, [])
+  // Usamos el hook (pausado si estamos creando un producto para no interferir)
+  useBarcodeScanner({
+    onScan: handleProductScan,
+    isActive: !isCreateDialogOpen
+  })
 
-  // --- FINALIZAR VENTA ---
+  // --- CREAR Y AGREGAR AL CARRITO ---
+  const handleCreateAndAddToCart = async (values: ProductFormData) => {
+    try {
+      // 1. Crear el producto en BD
+      // @ts-ignore
+      const result = await window.api.createProduct({
+        code: values.code,
+        name: values.name,
+        price: parseFloat(values.price)
+      })
+
+      // 2. Construir el objeto producto con el ID que nos devuelve la BD (lastInsertRowid)
+      // Nota: Asumimos que result devuelve { success: true, id: 123 } o similar.
+      // Si tu API no devuelve el ID, tendríamos que volver a buscarlo, pero generalmente lo devuelve.
+      const newProduct: Product = {
+        id: result.id || Date.now(), // Fallback si la API no devuelve ID
+        code: values.code,
+        name: values.name,
+        price: parseFloat(values.price)
+      }
+
+      // 3. Agregar al carrito inmediatamente
+      addToCart(newProduct)
+      toast.success('Producto creado y agregado al carrito')
+
+      // 4. Recargar la grilla (silenciosamente) para que aparezca en la lista
+      loadProducts(searchQuery)
+
+      // 5. Cerrar el modal (El componente Dialog lo hace, pero limpiamos estados)
+      setScannedCodeForNew('')
+    } catch (error: any) {
+      if (error.message?.includes('UNIQUE')) {
+        toast.error('Error: Ese código ya fue registrado mientras operabas')
+      } else {
+        toast.error('Error al crear producto')
+      }
+      throw error // Para que el dialog pare el spinner de carga
+    }
+  }
+
+  // --- CHECKOUT ---
   const handleCheckout = async (paymentMethodOverride?: string) => {
     if (cart.length === 0) return
-
     const method = paymentMethodOverride || selectedPaymentMethod
     const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
 
     try {
-      const saleData = {
+      // @ts-ignore
+      const result = await window.api.createSale({
         paymentMethod: method,
         total,
         items: cart.map((item) => ({
@@ -148,54 +184,36 @@ export default function Sales() {
           quantity: item.quantity,
           price: item.price
         }))
-      }
-
-      // @ts-ignore
-      const result = await window.api.createSale(saleData)
+      })
 
       if (result.success) {
-        toast.success(`Venta #${result.saleId} registrada con éxito`)
+        toast.success(`Venta #${result.saleId} registrada`)
         clearCart()
         setSelectedPaymentMethod('Efectivo')
-        setIsMobileCartOpen(false) // Cerrar sheet móvil si está abierto
+        setIsMobileCartOpen(false)
       }
     } catch (error) {
-      console.error(error)
       toast.error('Error al procesar la venta')
     }
   }
 
-  // Cálculos para la barra móvil
   const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0)
   const totalAmount = cart.reduce((acc, item) => acc + item.price * item.quantity, 0)
 
   return (
     <div className="flex h-full w-full bg-background overflow-hidden relative">
-      {/* =========================================
-          IZQUIERDA: PRODUCTOS (Grid)
-          Ocupa todo el ancho en Móvil.
-          Comparte espacio en Desktop/Tablet.
-         ========================================= */}
+      {/* SECCIÓN PRODUCTOS */}
       <div className="flex flex-1 flex-col h-full min-w-0 min-h-0">
         <div className="flex-none p-4">
           <ProductFilter onSearch={setSearchQuery} />
         </div>
-
         <Separator className="flex-none bg-border/60" />
-
-        {/* pb-24 en móvil: Para que el último producto no quede tapado por la barra flotante.
-           md:pb-0: En tablet/desktop no hay barra flotante.
-        */}
         <div className="flex-1 overflow-y-auto pb-24 md:pb-0 p-1">
           <ProductGrid products={products} onAddToCart={addToCart} />
         </div>
       </div>
 
-      {/* =========================================
-          DERECHA: CARRITO (Panel Lateral)
-          Modo Desktop/Tablet: Visible (hidden md:flex)
-          Ancho adaptable: w-[320px] en Tablet, más ancho en Desktop.
-         ========================================= */}
+      {/* SECCIÓN CARRITO (DESKTOP/TABLET) */}
       <aside className="hidden md:flex w-[320px] lg:w-[420px] flex-col h-full border-l border-border bg-card shadow-xl z-20 overflow-hidden transition-all duration-300">
         <Cart
           items={cart}
@@ -209,66 +227,51 @@ export default function Sales() {
         />
       </aside>
 
-      {/* =========================================
-          MÓVIL: BARRA FLOTANTE + SHEET
-          Modo Móvil: Visible (md:hidden)
-         ========================================= */}
+      {/* SECCIÓN MÓVIL (SHEET) */}
       <div className="md:hidden">
-        {/* Barra Flotante Inferior */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 bg-background/95 backdrop-blur-sm border-t z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+        <div className="absolute bottom-0 left-0 right-0 p-4 bg-background/95 backdrop-blur-sm border-t z-30 shadow-up">
           <Sheet open={isMobileCartOpen} onOpenChange={setIsMobileCartOpen}>
             <SheetTrigger asChild>
               <Button
                 size="lg"
                 className="w-full h-14 justify-between animate-in slide-in-from-bottom-2 shadow-md"
               >
-                {/* Lado Izquierdo: Icono + Badge */}
                 <div className="flex items-center gap-3">
                   <div className="relative">
                     <ShoppingCart className="h-5 w-5" />
                     {totalItems > 0 && (
-                      <Badge className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 bg-destructive hover:bg-destructive text-destructive-foreground border-2 border-primary">
+                      <Badge className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 bg-destructive text-destructive-foreground border-2 border-primary">
                         {totalItems}
                       </Badge>
                     )}
                   </div>
                   <span className="font-semibold text-base">Ver Carrito</span>
                 </div>
-
-                {/* Lado Derecho: Total + Chevron */}
                 <div className="flex items-center gap-3">
                   <span className="text-lg font-bold">${totalAmount.toLocaleString()}</span>
                   <ChevronUp className="h-5 w-5 opacity-70" />
                 </div>
               </Button>
             </SheetTrigger>
-
-            {/* Contenido Desplegable (Sheet) */}
             <SheetContent
               side="bottom"
               className="h-[100vh] p-0 rounded-none flex flex-col [&>button]:hidden"
             >
-              <SheetTitle className="sr-only">Carrito de Compras</SheetTitle>
-
-              {/* --- HEADER PERSONALIZADO (Cerrar) --- */}
+              <SheetTitle className="sr-only">Carrito</SheetTitle>
               <div className="flex items-center justify-between p-4 border-b bg-muted/20">
                 <div className="flex items-center gap-2">
                   <ShoppingCart className="h-5 w-5 text-primary" />
                   <h2 className="font-bold text-lg">Tu Pedido</h2>
                 </div>
-
-                {/* Botón X grande y claro */}
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => setIsMobileCartOpen(false)}
-                  className="h-10 w-10 rounded-full hover:bg-red-100 hover:text-red-600 transition-colors"
+                  className="h-10 w-10 rounded-full hover:bg-red-100 hover:text-red-600"
                 >
                   <X className="h-6 w-6" />
                 </Button>
               </div>
-
-              {/* Reutilizamos el componente Cart */}
               <div className="flex-1 overflow-hidden bg-background">
                 <Cart
                   items={cart}
@@ -285,6 +288,15 @@ export default function Sales() {
           </Sheet>
         </div>
       </div>
+
+      {/* --- DIÁLOGO DE CREACIÓN RÁPIDA --- */}
+      {/* Reutilizamos el mismo componente que en Products, pero conectado al Carrito */}
+      <ProductDialog
+        open={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
+        onSubmit={handleCreateAndAddToCart} // Función especial que crea y agrega al carro
+        defaultCode={scannedCodeForNew} // Código que acabas de escanear
+      />
     </div>
   )
 }

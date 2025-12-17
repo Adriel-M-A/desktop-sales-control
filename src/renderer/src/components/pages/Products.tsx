@@ -1,11 +1,15 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { Plus, ChevronLeft, ChevronRight, Eye, EyeOff } from 'lucide-react'
+import { toast } from 'sonner'
+
+// Hook Personalizado
+import { useBarcodeScanner } from '@/hooks/useBarcodeScanner'
+
 import ProductsTable, { Product } from '@/components/products/ProductsTable'
 import ProductFilter from '@/components/sales/ProductFilter'
 import ProductDialog, { ProductFormData } from '@/components/products/ProductDialog'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { toast } from 'sonner'
 
 const ITEMS_PER_PAGE = 15
 
@@ -13,7 +17,7 @@ export default function Products() {
   const [currentPage, setCurrentPage] = useState(1)
   const [products, setProducts] = useState<Product[]>([])
 
-  // Estados para el Modal
+  // Estados Modal
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [productToEdit, setProductToEdit] = useState<ProductFormData | null>(null)
   const [scannedCodeForNew, setScannedCodeForNew] = useState('')
@@ -21,10 +25,7 @@ export default function Products() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showInactive, setShowInactive] = useState(false)
 
-  // Buffer para el escáner global
-  const barcodeBuffer = useRef('')
-  const lastKeyTime = useRef(Date.now())
-
+  // --- CARGA ---
   const loadProducts = async (search = '', showAll = false) => {
     try {
       // @ts-ignore
@@ -44,69 +45,43 @@ export default function Products() {
     loadProducts(searchQuery, showInactive)
   }, [searchQuery, showInactive])
 
-  // --- LÓGICA DE ESCÁNER GLOBAL ---
-  useEffect(() => {
-    const handleGlobalScan = async (e: KeyboardEvent) => {
-      // Si el modal está abierto o escribimos en un input, ignorar
-      if (isDialogOpen) return
-      if (document.activeElement instanceof HTMLInputElement) return
+  // --- LÓGICA ESCÁNER (CON HOOK) ---
+  const handleGlobalScan = async (code: string) => {
+    const toastId = toast.loading('Procesando código...')
+    try {
+      // @ts-ignore
+      const existing = await window.api.getProductByCode(code)
 
-      // Buffer de tiempo (velocidad de escáner)
-      const currentTime = Date.now()
-      if (currentTime - lastKeyTime.current > 100) {
-        barcodeBuffer.current = ''
+      if (existing) {
+        // MODO EDICIÓN
+        toast.success('Producto encontrado', { id: toastId })
+        setProductToEdit({
+          id: existing.id,
+          code: existing.code,
+          name: existing.name,
+          price: existing.price
+        })
+        setScannedCodeForNew('')
+        setIsDialogOpen(true)
+      } else {
+        // MODO CREACIÓN
+        toast.info('Código nuevo detectado', { id: toastId })
+        setProductToEdit(null)
+        setScannedCodeForNew(code)
+        setIsDialogOpen(true)
       }
-      lastKeyTime.current = currentTime
-
-      if (e.key === 'Enter') {
-        const code = barcodeBuffer.current.trim()
-
-        if (code.length > 0) {
-          // Guardamos el ID de la notificación
-          const toastId = toast.loading('Procesando código...')
-
-          try {
-            // @ts-ignore
-            const existing = await window.api.getProductByCode(code)
-
-            if (existing) {
-              // EXISTE -> MODO EDICIÓN (Actualizamos el toast a Success)
-              toast.success('Producto encontrado', { id: toastId })
-
-              setProductToEdit({
-                id: existing.id,
-                code: existing.code,
-                name: existing.name,
-                price: existing.price
-              })
-              setScannedCodeForNew('')
-              setIsDialogOpen(true)
-            } else {
-              // NO EXISTE -> MODO CREACIÓN (Actualizamos el toast a Info)
-              toast.info('Código nuevo detectado', { id: toastId })
-
-              setProductToEdit(null)
-              setScannedCodeForNew(code)
-              setIsDialogOpen(true)
-            }
-          } catch (error) {
-            console.error(error)
-            // Error -> Actualizamos el toast a Error
-            toast.error('Error al leer código', { id: toastId })
-          }
-        }
-        barcodeBuffer.current = ''
-      } else if (e.key.length === 1) {
-        barcodeBuffer.current += e.key
-      }
+    } catch (error) {
+      toast.error('Error de lectura', { id: toastId })
     }
+  }
 
-    window.addEventListener('keydown', handleGlobalScan)
-    return () => window.removeEventListener('keydown', handleGlobalScan)
-  }, [isDialogOpen])
+  // Usamos el hook, pero lo desactivamos si el modal ya está abierto
+  useBarcodeScanner({
+    onScan: handleGlobalScan,
+    isActive: !isDialogOpen
+  })
 
   // --- CRUD HANDLERS ---
-
   const handleOpenCreate = () => {
     setProductToEdit(null)
     setScannedCodeForNew('')
@@ -130,31 +105,29 @@ export default function Products() {
   const handleSaveProduct = async (values: ProductFormData) => {
     try {
       if (productToEdit && values.id) {
-        // ACTUALIZAR
         // @ts-ignore
         await window.api.updateProduct(values.id, {
           name: values.name,
           price: parseFloat(values.price)
         })
-        toast.success('Producto actualizado correctamente')
+        toast.success('Actualizado correctamente')
       } else {
-        // CREAR
         // @ts-ignore
         await window.api.createProduct({
           code: values.code,
           name: values.name,
           price: parseFloat(values.price)
         })
-        toast.success('Producto creado correctamente')
+        toast.success('Creado correctamente')
       }
       loadProducts(searchQuery, showInactive)
     } catch (error: any) {
       if (error.message?.includes('UNIQUE')) {
-        toast.error('Error: El código ya existe')
+        toast.error('El código ya existe')
       } else {
         toast.error('Error al guardar')
       }
-      throw error // Re-lanza para que el dialog sepa que falló y pare el spinner
+      throw error
     }
   }
 
@@ -175,13 +148,14 @@ export default function Products() {
     try {
       // @ts-ignore
       await window.api.toggleProductStatus(id, !product.isActive)
-      toast.success(product.isActive ? 'Producto desactivado' : 'Producto reactivado')
+      toast.success('Estado actualizado')
       loadProducts(searchQuery, showInactive)
     } catch (error) {
       toast.error('Error al cambiar estado')
     }
   }
 
+  // Paginación
   const totalPages = Math.ceil(products.length / ITEMS_PER_PAGE) || 1
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
   const currentProducts = products.slice(startIndex, startIndex + ITEMS_PER_PAGE)
@@ -190,18 +164,11 @@ export default function Products() {
     <div className="flex h-full w-full flex-col bg-background overflow-hidden">
       <div className="flex items-center justify-between p-6 pb-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Catálogo de Productos
-          </h1>
-          <p className="text-sm text-muted-foreground">Gestiona tu catálogo y precios.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Catálogo</h1>
+          <p className="text-sm text-muted-foreground">Gestiona tu inventario.</p>
         </div>
-
-        <Button
-          onClick={handleOpenCreate}
-          className="gap-2 shadow-md hover:shadow-lg transition-all"
-        >
-          <Plus className="h-4 w-4" />
-          Nuevo Producto
+        <Button onClick={handleOpenCreate} className="gap-2 shadow-md">
+          <Plus className="h-4 w-4" /> Nuevo Producto
         </Button>
       </div>
 
@@ -211,18 +178,15 @@ export default function Products() {
         <div className="w-full max-w-sm">
           <ProductFilter onSearch={(val) => setSearchQuery(val)} />
         </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowInactive(!showInactive)}
-            className={`gap-2 transition-all ${showInactive ? 'bg-primary/10 border-primary text-primary' : 'bg-card text-muted-foreground'}`}
-          >
-            {showInactive ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-            {showInactive ? 'Ocultar Inactivos' : 'Ver Inactivos'}
-          </Button>
-        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowInactive(!showInactive)}
+          className={`gap-2 ${showInactive ? 'bg-primary/10 text-primary' : ''}`}
+        >
+          {showInactive ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+          {showInactive ? 'Ocultar Inactivos' : 'Ver Inactivos'}
+        </Button>
       </div>
 
       <div className="flex-1 overflow-auto px-6 pb-6">
@@ -232,32 +196,30 @@ export default function Products() {
           onToggleStatus={handleToggle}
           onDelete={handleDelete}
         />
-
+        {/* Controles de Paginación */}
         {products.length > 0 && (
           <div className="flex items-center justify-between py-4">
-            <div className="text-xs text-muted-foreground">
-              Mostrando {startIndex + 1}-{Math.min(startIndex + ITEMS_PER_PAGE, products.length)} de{' '}
+            <span className="text-xs text-muted-foreground">
+              {startIndex + 1}-{Math.min(startIndex + ITEMS_PER_PAGE, products.length)} de{' '}
               {products.length}
-            </div>
-            <div className="flex items-center gap-2">
+            </span>
+            <div className="flex gap-2">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                onClick={() => setCurrentPage((p) => p - 1)}
                 disabled={currentPage === 1}
-                className="bg-card hover:bg-muted"
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <div className="text-sm font-medium px-2 min-w-[3rem] text-center bg-card py-1 rounded-md border shadow-sm">
+              <div className="text-sm font-medium px-2 py-1 border rounded">
                 {currentPage} / {totalPages}
               </div>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                onClick={() => setCurrentPage((p) => p + 1)}
                 disabled={currentPage === totalPages}
-                className="bg-card hover:bg-muted"
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -270,8 +232,8 @@ export default function Products() {
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
         onSubmit={handleSaveProduct}
-        productToEdit={productToEdit} // Pasa el producto a editar
-        defaultCode={scannedCodeForNew} // Pasa el código nuevo escaneado
+        productToEdit={productToEdit}
+        defaultCode={scannedCodeForNew}
       />
     </div>
   )
