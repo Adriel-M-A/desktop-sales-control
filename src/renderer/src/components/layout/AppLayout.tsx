@@ -17,7 +17,7 @@ export default function AppLayout() {
         </main>
       </div>
 
-      <Toaster position="bottom-right" />
+      <Toaster position="bottom-center" />
     </div>
   )
 }

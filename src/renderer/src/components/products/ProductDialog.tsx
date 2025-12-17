@@ -10,56 +10,98 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { ScanBarcode, Package, DollarSign, Loader2, Save, PlusCircle } from 'lucide-react'
+import { ScanBarcode, Package, DollarSign, Loader2, Save, PlusCircle, Pencil } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+
+export interface ProductFormData {
+  id?: number
+  code: string
+  name: string
+  price: string
+}
 
 interface ProductDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit: (values: { code: string; name: string; price: number }) => Promise<void>
+  onSubmit: (values: ProductFormData) => Promise<void>
+  productToEdit?: ProductFormData | null // Objeto completo si editamos
+  defaultCode?: string // Código solo si es nuevo escaneado
 }
 
-export default function ProductDialog({ open, onOpenChange, onSubmit }: ProductDialogProps) {
-  const [formData, setFormData] = useState({
+export default function ProductDialog({
+  open,
+  onOpenChange,
+  onSubmit,
+  productToEdit,
+  defaultCode
+}: ProductDialogProps) {
+  const [formData, setFormData] = useState<ProductFormData>({
     code: '',
     name: '',
     price: ''
   })
 
-  // Estados de validación
+  // Estados de interfaz
   const [codeError, setCodeError] = useState<string | null>(null)
   const [isCheckingCode, setIsCheckingCode] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Referencias para el foco
+  // Referencias para foco
   const codeInputRef = useRef<HTMLInputElement>(null)
   const nameInputRef = useRef<HTMLInputElement>(null)
 
-  // Resetear formulario al abrir
+  const isEditing = !!productToEdit
+
+  // --- EFECTO DE APERTURA ---
   useEffect(() => {
     if (open) {
-      setFormData({ code: '', name: '', price: '' })
       setCodeError(null)
       setIsSubmitting(false)
-      // Auto-foco con pequeño delay para esperar la animación
-      setTimeout(() => codeInputRef.current?.focus(), 100)
-    }
-  }, [open])
 
-  // --- VALIDACIÓN DE CÓDIGO EXISTENTE ---
+      if (isEditing && productToEdit) {
+        // MODO EDICIÓN: Cargar datos
+        setFormData({
+          id: productToEdit.id,
+          code: productToEdit.code,
+          name: productToEdit.name,
+          price: productToEdit.price.toString()
+        })
+        // Enfocar nombre porque el código suele ser fijo
+        setTimeout(() => nameInputRef.current?.focus(), 100)
+      } else {
+        // MODO CREACIÓN: Limpiar o usar defaultCode
+        setFormData({
+          code: defaultCode || '',
+          name: '',
+          price: ''
+        })
+        // Si hay código pre-escaneado, saltar al nombre. Si no, al código.
+        setTimeout(() => {
+          if (defaultCode) {
+            nameInputRef.current?.focus()
+          } else {
+            codeInputRef.current?.focus()
+          }
+        }, 100)
+      }
+    }
+  }, [open, productToEdit, defaultCode])
+
+  // --- VALIDACIÓN DE CÓDIGO (Solo si es nuevo) ---
   const checkCodeAvailability = async () => {
+    // No validamos duplicados si estamos editando el mismo producto
+    if (isEditing) return
+
     const code = formData.code.trim()
     if (!code) return
 
     setIsCheckingCode(true)
     try {
       // @ts-ignore
-      // Reutilizamos la función que creamos para el escáner
       const existing = await window.api.getProductByCode(code)
-
       if (existing) {
-        setCodeError('Este código ya está en uso.')
+        setCodeError('Este código ya existe. Escanéalo en la pantalla principal para editar.')
       } else {
         setCodeError(null)
       }
@@ -71,52 +113,42 @@ export default function ProductDialog({ open, onOpenChange, onSubmit }: ProductD
   }
 
   // --- MANEJO DE INPUTS ---
-  const handleChange = (field: string, value: string) => {
+  const handleChange = (field: keyof ProductFormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
-    // Si cambian el código, limpiamos el error hasta que validen de nuevo
     if (field === 'code') setCodeError(null)
   }
 
-  // --- MANEJO DE TECLAS (ESCÁNER) ---
+  // --- ENTER SALTA AL SIGUIENTE CAMPO ---
   const handleCodeKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault()
-      // Validamos el código al dar enter
       checkCodeAvailability()
-      // Saltamos al siguiente campo
       nameInputRef.current?.focus()
     }
   }
 
-  // --- GUARDADO ---
+  // --- GUARDAR ---
   const handleSubmit = async (createAnother: boolean) => {
     setIsSubmitting(true)
-
     try {
-      await onSubmit({
-        code: formData.code,
-        name: formData.name,
-        price: parseFloat(formData.price)
-      })
+      await onSubmit(formData)
 
-      if (createAnother) {
-        // Resetear para el siguiente
+      if (createAnother && !isEditing) {
+        // Solo permitido en creación: Limpiar y enfocar código
         setFormData({ code: '', name: '', price: '' })
         setCodeError(null)
-        toast.success('Producto guardado. Listo para el siguiente.')
-        // Re-enfocar código
+        toast.success('Guardado. Listo para el siguiente.')
         setTimeout(() => codeInputRef.current?.focus(), 100)
       } else {
         onOpenChange(false)
       }
     } catch (error) {
-      // El error lo maneja el padre, pero aquí liberamos el loading
+      // Error manejado por el padre
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  // --- VALIDACIÓN GENERAL ---
   const isValid =
     formData.code.trim() !== '' &&
     formData.name.trim() !== '' &&
@@ -130,23 +162,24 @@ export default function ProductDialog({ open, onOpenChange, onSubmit }: ProductD
       <DialogContent className="sm:max-w-[450px] gap-6">
         <DialogHeader>
           <DialogTitle className="text-xl flex items-center gap-2">
-            <Package className="h-5 w-5 text-primary" />
-            Nuevo Producto
+            {isEditing ? (
+              <Pencil className="h-5 w-5 text-primary" />
+            ) : (
+              <Package className="h-5 w-5 text-primary" />
+            )}
+            {isEditing ? 'Editar Producto' : 'Nuevo Producto'}
           </DialogTitle>
           <DialogDescription>
-            Complete los datos. Use el escáner para mayor velocidad.
+            {isEditing
+              ? 'Modifique los detalles del producto seleccionado.'
+              : 'Complete los datos. Use el escáner para mayor velocidad.'}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-5">
           {/* CÓDIGO */}
           <div className="grid gap-2">
-            <Label htmlFor="code" className="flex justify-between">
-              Código de Barras
-              {isCheckingCode && (
-                <span className="text-xs text-muted-foreground animate-pulse">Verificando...</span>
-              )}
-            </Label>
+            <Label htmlFor="code">Código de Barras</Label>
             <div className="relative">
               <ScanBarcode
                 className={cn(
@@ -158,13 +191,16 @@ export default function ProductDialog({ open, onOpenChange, onSubmit }: ProductD
                 id="code"
                 ref={codeInputRef}
                 value={formData.code}
+                // Bloqueamos edición de código en modo Edit para evitar conflictos de ID
+                disabled={isEditing}
                 onChange={(e) => handleChange('code', e.target.value)}
-                onBlur={checkCodeAvailability} // Validar al salir del campo
-                onKeyDown={handleCodeKeyDown} // Salto con Enter
+                onBlur={checkCodeAvailability}
+                onKeyDown={handleCodeKeyDown}
                 placeholder="Escanea o escribe..."
                 className={cn(
                   'pl-9 font-mono tracking-wide',
-                  codeError && 'border-red-500 focus-visible:ring-red-500'
+                  codeError && 'border-red-500 focus-visible:ring-red-500',
+                  isEditing && 'bg-muted text-muted-foreground'
                 )}
                 autoComplete="off"
               />
@@ -201,7 +237,7 @@ export default function ProductDialog({ open, onOpenChange, onSubmit }: ProductD
               <Input
                 id="price"
                 type="number"
-                min="0.01" // HTML validation visual
+                min="0.01"
                 step="0.01"
                 value={formData.price}
                 onChange={(e) => handleChange('price', e.target.value)}
@@ -216,28 +252,24 @@ export default function ProductDialog({ open, onOpenChange, onSubmit }: ProductD
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            tabIndex={-1} // Sacar del ciclo de tabulación para ir directo a guardar
-          >
+          <Button variant="outline" onClick={() => onOpenChange(false)} tabIndex={-1}>
             Cancelar
           </Button>
 
           <div className="flex gap-2 w-full sm:w-auto">
-            {/* BOTÓN: GUARDAR Y OTRO */}
-            <Button
-              variant="secondary"
-              onClick={() => handleSubmit(true)}
-              disabled={!isValid || isSubmitting}
-              className="flex-1 sm:flex-none"
-              title="Guardar y limpiar para cargar otro"
-            >
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Guardar y Otro
-            </Button>
+            {/* Botón Guardar y Otro: Solo visible si estamos CREANDO */}
+            {!isEditing && (
+              <Button
+                variant="secondary"
+                onClick={() => handleSubmit(true)}
+                disabled={!isValid || isSubmitting}
+                className="flex-1 sm:flex-none"
+              >
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Guardar y Otro
+              </Button>
+            )}
 
-            {/* BOTÓN: GUARDAR Y CERRAR */}
             <Button
               onClick={() => handleSubmit(false)}
               disabled={!isValid || isSubmitting}
@@ -248,7 +280,7 @@ export default function ProductDialog({ open, onOpenChange, onSubmit }: ProductD
               ) : (
                 <Save className="mr-2 h-4 w-4" />
               )}
-              Guardar
+              {isEditing ? 'Actualizar' : 'Guardar'}
             </Button>
           </div>
         </DialogFooter>

@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Plus, ChevronLeft, ChevronRight, Eye, EyeOff } from 'lucide-react'
 import ProductsTable, { Product } from '@/components/products/ProductsTable'
 import ProductFilter from '@/components/sales/ProductFilter'
-import ProductDialog from '@/components/products/ProductDialog'
+import ProductDialog, { ProductFormData } from '@/components/products/ProductDialog'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
@@ -12,20 +12,27 @@ const ITEMS_PER_PAGE = 15
 export default function Products() {
   const [currentPage, setCurrentPage] = useState(1)
   const [products, setProducts] = useState<Product[]>([])
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+
+  // Estados para el Modal
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [productToEdit, setProductToEdit] = useState<ProductFormData | null>(null)
+  const [scannedCodeForNew, setScannedCodeForNew] = useState('')
+
   const [searchQuery, setSearchQuery] = useState('')
   const [showInactive, setShowInactive] = useState(false)
+
+  // Buffer para el escáner global
+  const barcodeBuffer = useRef('')
+  const lastKeyTime = useRef(Date.now())
 
   const loadProducts = async (search = '', showAll = false) => {
     try {
       // @ts-ignore
       const data = await window.api.getProducts(search, showAll)
-
       const formattedData = data.map((p: any) => ({
         ...p,
         isActive: Boolean(p.is_active)
       }))
-
       setProducts(formattedData)
     } catch (error) {
       console.error(error)
@@ -37,11 +44,109 @@ export default function Products() {
     loadProducts(searchQuery, showInactive)
   }, [searchQuery, showInactive])
 
-  const handleCreateProduct = async (values: { code: string; name: string; price: number }) => {
+  // --- LÓGICA DE ESCÁNER GLOBAL ---
+  useEffect(() => {
+    const handleGlobalScan = async (e: KeyboardEvent) => {
+      // Si el modal está abierto o escribimos en un input, ignorar
+      if (isDialogOpen) return
+      if (document.activeElement instanceof HTMLInputElement) return
+
+      // Buffer de tiempo (velocidad de escáner)
+      const currentTime = Date.now()
+      if (currentTime - lastKeyTime.current > 100) {
+        barcodeBuffer.current = ''
+      }
+      lastKeyTime.current = currentTime
+
+      if (e.key === 'Enter') {
+        const code = barcodeBuffer.current.trim()
+
+        if (code.length > 0) {
+          // Guardamos el ID de la notificación
+          const toastId = toast.loading('Procesando código...')
+
+          try {
+            // @ts-ignore
+            const existing = await window.api.getProductByCode(code)
+
+            if (existing) {
+              // EXISTE -> MODO EDICIÓN (Actualizamos el toast a Success)
+              toast.success('Producto encontrado', { id: toastId })
+
+              setProductToEdit({
+                id: existing.id,
+                code: existing.code,
+                name: existing.name,
+                price: existing.price
+              })
+              setScannedCodeForNew('')
+              setIsDialogOpen(true)
+            } else {
+              // NO EXISTE -> MODO CREACIÓN (Actualizamos el toast a Info)
+              toast.info('Código nuevo detectado', { id: toastId })
+
+              setProductToEdit(null)
+              setScannedCodeForNew(code)
+              setIsDialogOpen(true)
+            }
+          } catch (error) {
+            console.error(error)
+            // Error -> Actualizamos el toast a Error
+            toast.error('Error al leer código', { id: toastId })
+          }
+        }
+        barcodeBuffer.current = ''
+      } else if (e.key.length === 1) {
+        barcodeBuffer.current += e.key
+      }
+    }
+
+    window.addEventListener('keydown', handleGlobalScan)
+    return () => window.removeEventListener('keydown', handleGlobalScan)
+  }, [isDialogOpen])
+
+  // --- CRUD HANDLERS ---
+
+  const handleOpenCreate = () => {
+    setProductToEdit(null)
+    setScannedCodeForNew('')
+    setIsDialogOpen(true)
+  }
+
+  const handleOpenEdit = (id: number) => {
+    const product = products.find((p) => p.id === id)
+    if (product) {
+      setProductToEdit({
+        id: product.id,
+        code: product.code,
+        name: product.name,
+        price: product.price.toString()
+      })
+      setScannedCodeForNew('')
+      setIsDialogOpen(true)
+    }
+  }
+
+  const handleSaveProduct = async (values: ProductFormData) => {
     try {
-      // @ts-ignore
-      await window.api.createProduct(values)
-      toast.success('Producto guardado correctamente')
+      if (productToEdit && values.id) {
+        // ACTUALIZAR
+        // @ts-ignore
+        await window.api.updateProduct(values.id, {
+          name: values.name,
+          price: parseFloat(values.price)
+        })
+        toast.success('Producto actualizado correctamente')
+      } else {
+        // CREAR
+        // @ts-ignore
+        await window.api.createProduct({
+          code: values.code,
+          name: values.name,
+          price: parseFloat(values.price)
+        })
+        toast.success('Producto creado correctamente')
+      }
       loadProducts(searchQuery, showInactive)
     } catch (error: any) {
       if (error.message?.includes('UNIQUE')) {
@@ -49,11 +154,8 @@ export default function Products() {
       } else {
         toast.error('Error al guardar')
       }
+      throw error // Re-lanza para que el dialog sepa que falló y pare el spinner
     }
-  }
-
-  const handleEdit = (id: number) => {
-    toast.info('Edición próximamente')
   }
 
   const handleDelete = async (id: number) => {
@@ -70,7 +172,6 @@ export default function Products() {
   const handleToggle = async (id: number) => {
     const product = products.find((p) => p.id === id)
     if (!product) return
-
     try {
       // @ts-ignore
       await window.api.toggleProductStatus(id, !product.isActive)
@@ -96,7 +197,7 @@ export default function Products() {
         </div>
 
         <Button
-          onClick={() => setIsCreateDialogOpen(true)}
+          onClick={handleOpenCreate}
           className="gap-2 shadow-md hover:shadow-lg transition-all"
         >
           <Plus className="h-4 w-4" />
@@ -127,7 +228,7 @@ export default function Products() {
       <div className="flex-1 overflow-auto px-6 pb-6">
         <ProductsTable
           products={currentProducts}
-          onEdit={handleEdit}
+          onEdit={handleOpenEdit}
           onToggleStatus={handleToggle}
           onDelete={handleDelete}
         />
@@ -166,9 +267,11 @@ export default function Products() {
       </div>
 
       <ProductDialog
-        open={isCreateDialogOpen}
-        onOpenChange={setIsCreateDialogOpen}
-        onSubmit={handleCreateProduct}
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        onSubmit={handleSaveProduct}
+        productToEdit={productToEdit} // Pasa el producto a editar
+        defaultCode={scannedCodeForNew} // Pasa el código nuevo escaneado
       />
     </div>
   )
