@@ -1,48 +1,45 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { electronAPI } from '@electron-toolkit/preload'
 
+// Estructuramos la API por dominios para mayor claridad en el Frontend
 const api = {
-  // --- PRODUCTOS ---
-  getProducts: (search = '', includeInactive = false) =>
-    ipcRenderer.invoke('db:get-products', { search, includeInactive }),
-  createProduct: (product: any) => ipcRenderer.invoke('db:create-product', product),
-  updateProduct: (id: number, data: any) =>
-    ipcRenderer.invoke('db:update-product', { id, ...data }),
-  deleteProduct: (id: number) => ipcRenderer.invoke('db:delete-product', id),
-  toggleProductStatus: (id: number, isActive: boolean) =>
-    ipcRenderer.invoke('db:toggle-product-status', { id, isActive }),
-
-  // --- VENTAS ---
-  createSale: (sale: any) => ipcRenderer.invoke('db:create-sale', sale),
-
-  getSales: (params: { limit?: number; offset?: number; startDate?: string; endDate?: string }) =>
-    ipcRenderer.invoke('db:get-sales', params),
-
-  cancelSale: (id: number) => ipcRenderer.invoke('db:cancel-sale', id),
-  // NUEVO: Función para restaurar
-  restoreSale: (id: number) => ipcRenderer.invoke('db:restore-sale', id),
-
-  // --- REPORTES ---
-  getDashboardStats: (range: { startDate: string; endDate: string }) =>
-    ipcRenderer.invoke('db:get-stats', range),
-  getTopProducts: (range: { startDate: string; endDate: string }) =>
-    ipcRenderer.invoke('db:get-top-products', range),
-  getSalesChart: (range: { startDate: string; endDate: string }) =>
-    ipcRenderer.invoke('db:get-sales-chart', range),
-
-  getProductByCode: (code: string) => ipcRenderer.invoke('db:get-product-by-code', code)
+  products: {
+    getAll: (params?: { search?: string; includeInactive?: boolean }) =>
+      ipcRenderer.invoke('db:get-products', params),
+    create: (product: any) => ipcRenderer.invoke('db:create-product', product),
+    update: (product: any) => ipcRenderer.invoke('db:update-product', product),
+    delete: (id: number) => ipcRenderer.invoke('db:delete-product', id),
+    toggleStatus: (id: number, isActive: boolean) =>
+      ipcRenderer.invoke('db:toggle-product-status', { id, isActive }),
+    getByCode: (code: string) => ipcRenderer.invoke('db:get-product-by-code', code)
+  },
+  sales: {
+    create: (sale: any) => ipcRenderer.invoke('db:create-sale', sale),
+    getHistory: (params: any) => ipcRenderer.invoke('db:get-sales', params),
+    cancel: (id: number) => ipcRenderer.invoke('db:cancel-sale', id),
+    restore: (id: number) => ipcRenderer.invoke('db:restore-sale', id)
+  },
+  stats: {
+    getDashboard: (params: { startDate: string; endDate: string }) =>
+      ipcRenderer.invoke('db:get-stats', params),
+    getTopProducts: (params: { startDate: string; endDate: string }) =>
+      ipcRenderer.invoke('db:get-top-products', params),
+    getChart: (params: { startDate: string; endDate: string }) =>
+      ipcRenderer.invoke('db:get-sales-chart', params)
+  },
+  window: {
+    minimize: () => ipcRenderer.send('window-minimize'),
+    maximize: () => ipcRenderer.send('window-maximize'),
+    close: () => ipcRenderer.send('window-close')
+  }
 }
 
 if (process.contextIsolated) {
   try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('api', api)
   } catch (error) {
     console.error(error)
   }
 } else {
-  // @ts-ignore
-  window.electron = electronAPI
-  // @ts-ignore
+  // @ts-ignore (para entornos sin aislamiento)
   window.api = api
 }

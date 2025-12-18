@@ -14,6 +14,9 @@ import { ScanBarcode, Package, DollarSign, Loader2, Save, PlusCircle, Pencil } f
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
+/**
+ * Interfaz para los datos del formulario de productos.
+ */
 export interface ProductFormData {
   id?: number
   code: string
@@ -25,58 +28,58 @@ interface ProductDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSubmit: (values: ProductFormData) => Promise<void>
-  productToEdit?: ProductFormData | null // Objeto completo si editamos
-  defaultCode?: string // Código solo si es nuevo escaneado
+  product?: ProductFormData | null // Objeto para edición
+  defaultCode?: string // Código detectado por escáner
 }
 
 export default function ProductDialog({
   open,
   onOpenChange,
   onSubmit,
-  productToEdit,
+  product,
   defaultCode
-}: ProductDialogProps) {
+}: ProductDialogProps): React.ReactElement {
   const [formData, setFormData] = useState<ProductFormData>({
     code: '',
     name: '',
     price: ''
   })
 
-  // Estados de interfaz
+  // Estados de validación e interfaz
   const [codeError, setCodeError] = useState<string | null>(null)
   const [isCheckingCode, setIsCheckingCode] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Referencias para foco
+  // Referencias para manejo de foco manual
   const codeInputRef = useRef<HTMLInputElement>(null)
   const nameInputRef = useRef<HTMLInputElement>(null)
 
-  const isEditing = !!productToEdit
+  const isEditing = !!product
 
-  // --- EFECTO DE APERTURA ---
+  // --- EFECTO DE SINCRONIZACIÓN DE DATOS ---
   useEffect(() => {
     if (open) {
       setCodeError(null)
       setIsSubmitting(false)
 
-      if (isEditing && productToEdit) {
-        // MODO EDICIÓN: Cargar datos
+      if (isEditing && product) {
+        // MODO EDICIÓN: Poblamos con datos existentes
         setFormData({
-          id: productToEdit.id,
-          code: productToEdit.code,
-          name: productToEdit.name,
-          price: productToEdit.price.toString()
+          id: product.id,
+          code: product.code,
+          name: product.name,
+          price: product.price.toString()
         })
-        // Enfocar nombre porque el código suele ser fijo
+        // Enfocamos el nombre ya que el código suele ser inmutable en edición
         setTimeout(() => nameInputRef.current?.focus(), 100)
       } else {
-        // MODO CREACIÓN: Limpiar o usar defaultCode
+        // MODO CREACIÓN: Limpio o con código pre-escaneado
         setFormData({
           code: defaultCode || '',
           name: '',
           price: ''
         })
-        // Si hay código pre-escaneado, saltar al nombre. Si no, al código.
+        // Gestión inteligente del foco inicial
         setTimeout(() => {
           if (defaultCode) {
             nameInputRef.current?.focus()
@@ -86,11 +89,10 @@ export default function ProductDialog({
         }, 100)
       }
     }
-  }, [open, productToEdit, defaultCode])
+  }, [open, product, defaultCode])
 
-  // --- VALIDACIÓN DE CÓDIGO (Solo si es nuevo) ---
-  const checkCodeAvailability = async () => {
-    // No validamos duplicados si estamos editando el mismo producto
+  // --- VALIDACIÓN DE DISPONIBILIDAD DE CÓDIGO ---
+  const checkCodeAvailability = async (): Promise<void> => {
     if (isEditing) return
 
     const code = formData.code.trim()
@@ -98,28 +100,27 @@ export default function ProductDialog({
 
     setIsCheckingCode(true)
     try {
-      // @ts-ignore
-      const existing = await window.api.getProductByCode(code)
+      // Cambio: Uso de la nueva API modular products.getByCode
+      const existing = await window.api.products.getByCode(code)
       if (existing) {
-        setCodeError('Este código ya existe. Escanéalo en la pantalla principal para editar.')
+        setCodeError('Este código ya existe en el inventario.')
       } else {
         setCodeError(null)
       }
     } catch (error) {
-      console.error(error)
+      console.error('Error verificando código:', error)
     } finally {
       setIsCheckingCode(false)
     }
   }
 
-  // --- MANEJO DE INPUTS ---
-  const handleChange = (field: keyof ProductFormData, value: string) => {
+  // --- MANEJADORES DE EVENTOS ---
+  const handleChange = (field: keyof ProductFormData, value: string): void => {
     setFormData((prev) => ({ ...prev, [field]: value }))
     if (field === 'code') setCodeError(null)
   }
 
-  // --- ENTER SALTA AL SIGUIENTE CAMPO ---
-  const handleCodeKeyDown = (e: React.KeyboardEvent) => {
+  const handleCodeKeyDown = (e: React.KeyboardEvent): void => {
     if (e.key === 'Enter') {
       e.preventDefault()
       checkCodeAvailability()
@@ -127,23 +128,22 @@ export default function ProductDialog({
     }
   }
 
-  // --- GUARDAR ---
-  const handleSubmit = async (createAnother: boolean) => {
+  const handleSubmit = async (createAnother: boolean): Promise<void> => {
     setIsSubmitting(true)
     try {
       await onSubmit(formData)
 
       if (createAnother && !isEditing) {
-        // Solo permitido en creación: Limpiar y enfocar código
+        // Lógica de creación rápida en serie
         setFormData({ code: '', name: '', price: '' })
         setCodeError(null)
-        toast.success('Guardado. Listo para el siguiente.')
+        toast.success('Producto guardado. Ingrese el siguiente.')
         setTimeout(() => codeInputRef.current?.focus(), 100)
       } else {
         onOpenChange(false)
       }
     } catch (error) {
-      // Error manejado por el padre
+      // El error es capturado por el componente padre para mostrar el toast
     } finally {
       setIsSubmitting(false)
     }
@@ -171,13 +171,13 @@ export default function ProductDialog({
           </DialogTitle>
           <DialogDescription>
             {isEditing
-              ? 'Modifique los detalles del producto seleccionado.'
-              : 'Complete los datos. Use el escáner para mayor velocidad.'}
+              ? 'Modifique los campos necesarios para actualizar el producto.'
+              : 'Ingrese la información del nuevo producto o use el escáner.'}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-5">
-          {/* CÓDIGO */}
+          {/* CAMPO: CÓDIGO DE BARRAS */}
           <div className="grid gap-2">
             <Label htmlFor="code">Código de Barras</Label>
             <div className="relative">
@@ -191,14 +191,13 @@ export default function ProductDialog({
                 id="code"
                 ref={codeInputRef}
                 value={formData.code}
-                // Bloqueamos edición de código en modo Edit para evitar conflictos de ID
                 disabled={isEditing}
                 onChange={(e) => handleChange('code', e.target.value)}
                 onBlur={checkCodeAvailability}
                 onKeyDown={handleCodeKeyDown}
-                placeholder="Escanea o escribe..."
+                placeholder="Escanee el código..."
                 className={cn(
-                  'pl-9 font-mono tracking-wide',
+                  'pl-9 font-mono tracking-wide no-drag',
                   codeError && 'border-red-500 focus-visible:ring-red-500',
                   isEditing && 'bg-muted text-muted-foreground'
                 )}
@@ -212,7 +211,7 @@ export default function ProductDialog({
             )}
           </div>
 
-          {/* NOMBRE */}
+          {/* CAMPO: NOMBRE */}
           <div className="grid gap-2">
             <Label htmlFor="name">Nombre del Producto</Label>
             <div className="relative">
@@ -222,14 +221,14 @@ export default function ProductDialog({
                 ref={nameInputRef}
                 value={formData.name}
                 onChange={(e) => handleChange('name', e.target.value)}
-                placeholder="Ej: Alfajor de Maicena"
-                className="pl-9"
+                placeholder="Nombre descriptivo..."
+                className="pl-9 no-drag"
                 autoComplete="off"
               />
             </div>
           </div>
 
-          {/* PRECIO */}
+          {/* CAMPO: PRECIO */}
           <div className="grid gap-2">
             <Label htmlFor="price">Precio de Venta</Label>
             <div className="relative">
@@ -242,28 +241,32 @@ export default function ProductDialog({
                 value={formData.price}
                 onChange={(e) => handleChange('price', e.target.value)}
                 placeholder="0.00"
-                className="pl-9"
+                className="pl-9 no-drag"
               />
             </div>
             {formData.price !== '' && parseFloat(formData.price) <= 0 && (
-              <p className="text-xs text-amber-600">El precio debe ser mayor a 0.</p>
+              <p className="text-xs text-amber-600">El precio debe ser mayor a cero.</p>
             )}
           </div>
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={() => onOpenChange(false)} tabIndex={-1}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="no-drag"
+            tabIndex={-1}
+          >
             Cancelar
           </Button>
 
           <div className="flex gap-2 w-full sm:w-auto">
-            {/* Botón Guardar y Otro: Solo visible si estamos CREANDO */}
             {!isEditing && (
               <Button
                 variant="secondary"
                 onClick={() => handleSubmit(true)}
                 disabled={!isValid || isSubmitting}
-                className="flex-1 sm:flex-none"
+                className="flex-1 sm:flex-none no-drag"
               >
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Guardar y Otro
@@ -273,7 +276,7 @@ export default function ProductDialog({
             <Button
               onClick={() => handleSubmit(false)}
               disabled={!isValid || isSubmitting}
-              className="flex-1 sm:flex-none"
+              className="flex-1 sm:flex-none no-drag"
             >
               {isSubmitting ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

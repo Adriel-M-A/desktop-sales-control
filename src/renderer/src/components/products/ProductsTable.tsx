@@ -1,3 +1,4 @@
+// src/renderer/src/components/products/ProductsTable.tsx
 import { Edit, Trash2, Power, PowerOff } from 'lucide-react'
 import {
   Table,
@@ -10,6 +11,10 @@ import {
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
+/**
+ * Interfaz unificada de Producto para toda la aplicación.
+ * Se asegura que isActive sea requerido para evitar errores de tipado en Sales y Products.
+ */
 export interface Product {
   id: number
   code: string
@@ -25,12 +30,16 @@ interface ProductsTableProps {
   onDelete: (id: number) => void
 }
 
+/**
+ * Tabla de gestión de productos del catálogo.
+ * Muestra información detallada y permite acciones de edición, activación y eliminación.
+ */
 export default function ProductsTable({
   products,
   onEdit,
   onToggleStatus,
   onDelete
-}: ProductsTableProps) {
+}: ProductsTableProps): React.ReactElement {
   return (
     <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
       <Table>
@@ -51,7 +60,7 @@ export default function ProductsTable({
           {products.length === 0 ? (
             <TableRow>
               <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                No se encontraron productos.
+                No se encontraron productos en el inventario.
               </TableCell>
             </TableRow>
           ) : (
@@ -60,20 +69,20 @@ export default function ProductsTable({
                 key={product.id}
                 className="group hover:bg-muted/20 transition-colors border-b-border/50"
               >
-                {/* Código */}
+                {/* Columna: Código de Barras */}
                 <TableCell className="font-medium font-mono text-xs text-muted-foreground">
                   {product.code}
                 </TableCell>
 
-                {/* Nombre */}
+                {/* Columna: Nombre */}
                 <TableCell className="font-medium text-foreground">{product.name}</TableCell>
 
-                {/* Precio */}
+                {/* Columna: Precio */}
                 <TableCell className="text-right font-bold tabular-nums pr-8 text-foreground group-hover:text-primary transition-colors">
                   ${product.price.toLocaleString()}
                 </TableCell>
 
-                {/* Estado */}
+                {/* Columna: Estado (Badge dinámico) */}
                 <TableCell className="text-center">
                   <span
                     className={cn(
@@ -87,30 +96,32 @@ export default function ProductsTable({
                   </span>
                 </TableCell>
 
-                {/* Acciones - CAMBIO AQUÍ: Eliminado 'opacity-0' y 'group-hover:opacity-100' */}
+                {/* Columna: Botones de Acción */}
                 <TableCell className="text-center">
                   <div className="flex justify-center gap-1">
+                    {/* Botón: Editar */}
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                      className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10 no-drag"
                       onClick={() => onEdit(product.id)}
-                      title="Modificar"
+                      title="Modificar producto"
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
 
+                    {/* Botón: Alternar Estado (Activar/Desactivar) */}
                     <Button
                       variant="ghost"
                       size="icon"
                       className={cn(
-                        'h-8 w-8 transition-colors',
+                        'h-8 w-8 transition-colors no-drag',
                         product.isActive
                           ? 'text-green-600/70 hover:text-green-700 hover:bg-green-50'
                           : 'text-muted-foreground hover:text-green-600'
                       )}
                       onClick={() => onToggleStatus(product.id)}
-                      title={product.isActive ? 'Desactivar' : 'Activar'}
+                      title={product.isActive ? 'Desactivar producto' : 'Activar producto'}
                     >
                       {product.isActive ? (
                         <Power className="h-4 w-4" />
@@ -119,12 +130,13 @@ export default function ProductsTable({
                       )}
                     </Button>
 
+                    {/* Botón: Eliminación (Lógica) */}
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 no-drag"
                       onClick={() => onDelete(product.id)}
-                      title="Eliminar"
+                      title="Dar de baja producto"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>

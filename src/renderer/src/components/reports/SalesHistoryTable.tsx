@@ -1,3 +1,4 @@
+// src/renderer/src/components/reports/SalesHistoryTable.tsx
 import { useState, useEffect, Fragment } from 'react'
 import {
   ChevronDown,
@@ -11,8 +12,8 @@ import {
   AlertCircle,
   AlertTriangle,
   Package,
-  RotateCcw, // Icono para Recuperar
-  CheckCircle // Icono para confirmación positiva
+  RotateCcw,
+  CheckCircle
 } from 'lucide-react'
 import {
   Table,
@@ -42,53 +43,46 @@ interface SalesHistoryTableProps {
 
 const ITEMS_PER_PAGE = 10
 
+/**
+ * Tabla de historial de ventas completa.
+ * Mantiene todos los estilos originales y la lógica de expansión de productos.
+ */
 export default function SalesHistoryTable({
   onSaleUpdated,
   dateRange,
   totalRows = 0
-}: SalesHistoryTableProps) {
+}: SalesHistoryTableProps): React.ReactElement {
   const [sales, setSales] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
   const [expandedRows, setExpandedRows] = useState<number[]>([])
 
-  // Estado para anular venta
+  // Estados para gestión de anulación y restauración
   const [saleIdToCancel, setSaleIdToCancel] = useState<number | null>(null)
-
-  // NUEVO: Estado para restaurar venta
   const [saleIdToRestore, setSaleIdToRestore] = useState<number | null>(null)
-
   const [currentPage, setCurrentPage] = useState(1)
 
-  const loadSales = async () => {
+  /**
+   * Carga el historial de ventas desde la base de datos modularizada.
+   */
+  const loadSales = async (): Promise<void> => {
     if (!dateRange) return
 
     setIsLoading(true)
     setError(null)
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 300))
-
-      // @ts-ignore
-      if (!window.api || typeof window.api.getSales !== 'function') {
-        throw new Error('La API no está disponible.')
-      }
-
       const offset = (currentPage - 1) * ITEMS_PER_PAGE
 
-      const data = await window.api.getSales({
+      // Llamada corregida a la nueva estructura de API
+      const data = await window.api.sales.getHistory({
         limit: ITEMS_PER_PAGE,
         offset,
         startDate: dateRange.startDate,
         endDate: dateRange.endDate
       })
 
-      if (Array.isArray(data)) {
-        setSales(data)
-      } else {
-        setSales([])
-      }
+      setSales(Array.isArray(data) ? data : [])
     } catch (err: any) {
       console.error('Error cargando ventas:', err)
       setError('No se pudo conectar con la base de datos.')
@@ -100,65 +94,46 @@ export default function SalesHistoryTable({
   useEffect(() => {
     setCurrentPage(1)
   }, [dateRange])
-
   useEffect(() => {
     loadSales()
   }, [currentPage, dateRange])
 
-  const refresh = () => {
+  const refresh = (): void => {
     loadSales()
     if (onSaleUpdated) onSaleUpdated()
   }
 
-  const toggleRow = (id: number) => {
+  const toggleRow = (id: number): void => {
     setExpandedRows((prev) =>
       prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id]
     )
   }
 
-  // --- LÓGICA DE ANULACIÓN ---
-  const initiateCancel = (e: React.MouseEvent, id: number) => {
-    e.stopPropagation()
-    setSaleIdToCancel(id)
-  }
-
-  const confirmCancel = async () => {
+  const confirmCancel = async (): Promise<void> => {
     if (saleIdToCancel === null) return
     try {
-      // @ts-ignore
-      if (window.api) {
-        await window.api.cancelSale(saleIdToCancel)
-        toast.success('Venta anulada correctamente')
-        setSaleIdToCancel(null)
-        refresh()
-      }
+      await window.api.sales.cancel(saleIdToCancel)
+      toast.success('Venta anulada correctamente')
+      setSaleIdToCancel(null)
+      refresh()
     } catch (error) {
       toast.error('Error al anular venta')
     }
   }
 
-  // --- NUEVA LÓGICA DE RESTAURACIÓN ---
-  const initiateRestore = (e: React.MouseEvent, id: number) => {
-    e.stopPropagation()
-    setSaleIdToRestore(id)
-  }
-
-  const confirmRestore = async () => {
+  const confirmRestore = async (): Promise<void> => {
     if (saleIdToRestore === null) return
     try {
-      // @ts-ignore
-      if (window.api) {
-        await window.api.restoreSale(saleIdToRestore)
-        toast.success('Venta recuperada exitosamente')
-        setSaleIdToRestore(null)
-        refresh()
-      }
+      await window.api.sales.restore(saleIdToRestore)
+      toast.success('Venta recuperada exitosamente')
+      setSaleIdToRestore(null)
+      refresh()
     } catch (error) {
       toast.error('Error al recuperar venta')
     }
   }
 
-  const formatDateTime = (dateString: string) => {
+  const formatDateTime = (dateString: string): string => {
     if (!dateString) return '-'
     return new Date(dateString).toLocaleString('es-AR', {
       day: '2-digit',
@@ -168,7 +143,7 @@ export default function SalesHistoryTable({
     })
   }
 
-  const getPaymentIcon = (method: string) => {
+  const getPaymentIcon = (method: string): React.ReactNode => {
     const m = (method || '').toLowerCase()
     if (m.includes('efectivo')) return <Banknote className="h-3 w-3 mr-1" />
     if (m.includes('tarjeta')) return <CreditCard className="h-3 w-3 mr-1" />
@@ -194,8 +169,8 @@ export default function SalesHistoryTable({
       <div className="rounded-xl border border-destructive/20 bg-red-50/50 h-[200px] flex flex-col items-center justify-center text-red-600 p-6 text-center">
         <AlertCircle className="h-10 w-10 mb-2" />
         <h3 className="font-semibold">Error de Conexión</h3>
-        <p className="text-sm text-muted-foreground mb-4">No se pudieron cargar los datos.</p>
-        <Button variant="outline" size="sm" onClick={loadSales} className="bg-white">
+        <p className="text-sm text-muted-foreground mb-4">{error}</p>
+        <Button variant="outline" size="sm" onClick={loadSales} className="bg-white no-drag">
           Reintentar
         </Button>
       </div>
@@ -241,8 +216,7 @@ export default function SalesHistoryTable({
                           'cursor-pointer transition-colors border-b-border/50',
                           'hover:bg-muted/20',
                           isExpanded && 'bg-muted/30 border-b-0',
-                          isCancelled &&
-                            'opacity-60 bg-red-50/50 hover:bg-red-50/80 dark:bg-red-900/10'
+                          isCancelled && 'opacity-60 bg-red-50/50 dark:bg-red-900/10'
                         )}
                         onClick={() => toggleRow(sale.id)}
                       >
@@ -250,7 +224,7 @@ export default function SalesHistoryTable({
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6 text-muted-foreground"
+                            className="h-6 w-6 text-muted-foreground no-drag"
                           >
                             {isExpanded ? (
                               <ChevronDown className="h-4 w-4" />
@@ -301,29 +275,21 @@ export default function SalesHistoryTable({
                         </TableCell>
 
                         <TableCell>
-                          {isCancelled ? (
-                            // BOTÓN DE RECUPERAR (Solo visible si está cancelado)
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-muted-foreground hover:text-green-600 hover:bg-green-50"
-                              onClick={(e) => initiateRestore(e, sale.id)}
-                              title="Recuperar Venta"
-                            >
-                              <RotateCcw className="h-4 w-4" />
-                            </Button>
-                          ) : (
-                            // BOTÓN DE ANULAR (Solo visible si NO está cancelado)
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                              onClick={(e) => initiateCancel(e, sale.id)}
-                              title="Anular Venta"
-                            >
-                              <Ban className="h-4 w-4" />
-                            </Button>
-                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-primary no-drag"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              isCancelled ? setSaleIdToRestore(sale.id) : setSaleIdToCancel(sale.id)
+                            }}
+                          >
+                            {isCancelled ? (
+                              <RotateCcw className="h-4 w-4 text-green-600" />
+                            ) : (
+                              <Ban className="h-4 w-4 text-red-600" />
+                            )}
+                          </Button>
                         </TableCell>
                       </TableRow>
 
@@ -397,34 +363,31 @@ export default function SalesHistoryTable({
           </Table>
         </div>
 
-        {/* PIE DE PÁGINA */}
+        {/* PIE DE PÁGINA / PAGINACIÓN */}
         {sales.length > 0 && (
           <div className="flex items-center justify-between p-4 border-t border-border bg-muted/10">
             <div className="text-xs text-muted-foreground">
               Mostrando {startRange}-{endRange} de {totalRows} movimientos
             </div>
-
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage === 1 || isLoading}
-                className="bg-card hover:bg-muted"
+                className="bg-card hover:bg-muted no-drag"
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-
               <div className="text-sm font-medium px-2 min-w-[3rem] text-center bg-card py-1 rounded-md border shadow-sm">
                 {currentPage} / {totalPages}
               </div>
-
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={currentPage >= totalPages || isLoading}
-                className="bg-card hover:bg-muted"
+                className="bg-card hover:bg-muted no-drag"
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -433,7 +396,7 @@ export default function SalesHistoryTable({
         )}
       </div>
 
-      {/* DIÁLOGO DE ANULACIÓN */}
+      {/* DIÁLOGOS DE CONFIRMACIÓN */}
       <Dialog
         open={saleIdToCancel !== null}
         onOpenChange={(open) => !open && setSaleIdToCancel(null)}
@@ -441,8 +404,7 @@ export default function SalesHistoryTable({
         <DialogContent className="sm:max-w-md bg-card border-border">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="h-5 w-5" />
-              ¿Anular esta venta?
+              <AlertTriangle className="h-5 w-5" /> ¿Anular esta venta?
             </DialogTitle>
             <DialogDescription className="pt-2 text-muted-foreground">
               Esta acción marcará la venta como cancelada y afectará los reportes financieros
@@ -450,21 +412,16 @@ export default function SalesHistoryTable({
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              variant="outline"
-              onClick={() => setSaleIdToCancel(null)}
-              className="bg-card hover:bg-muted text-foreground"
-            >
+            <Button variant="outline" onClick={() => setSaleIdToCancel(null)} className="no-drag">
               No, mantener
             </Button>
-            <Button variant="destructive" onClick={confirmCancel}>
+            <Button variant="destructive" onClick={confirmCancel} className="no-drag">
               Sí, anular venta
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* DIÁLOGO DE RESTAURACIÓN */}
       <Dialog
         open={saleIdToRestore !== null}
         onOpenChange={(open) => !open && setSaleIdToRestore(null)}
@@ -472,22 +429,20 @@ export default function SalesHistoryTable({
         <DialogContent className="sm:max-w-md bg-card border-border">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-green-600">
-              <CheckCircle className="h-5 w-5" />
-              ¿Recuperar esta venta?
+              <CheckCircle className="h-5 w-5" /> ¿Recuperar esta venta?
             </DialogTitle>
             <DialogDescription className="pt-2 text-muted-foreground">
               La venta volverá a contarse como válida en los reportes y estadísticas.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              variant="outline"
-              onClick={() => setSaleIdToRestore(null)}
-              className="bg-card hover:bg-muted text-foreground"
-            >
+            <Button variant="outline" onClick={() => setSaleIdToRestore(null)} className="no-drag">
               Cancelar
             </Button>
-            <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={confirmRestore}>
+            <Button
+              className="bg-green-600 hover:bg-green-700 text-white no-drag"
+              onClick={confirmRestore}
+            >
               Sí, recuperar
             </Button>
           </DialogFooter>
